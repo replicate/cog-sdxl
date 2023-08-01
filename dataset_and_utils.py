@@ -94,7 +94,7 @@ class PreprocessedDataset(Dataset):
             self.masks = []
 
             self.do_cache = True
-            
+
             print("Captions to train on: ")
             for idx in range(len(self.data)):
                 token, vae_latent, mask = self._process(idx)

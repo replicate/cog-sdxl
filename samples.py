@@ -1,4 +1,3 @@
-
 """
 A handy utility for verifying SDXL image generation locally. 
 To set up, first run a local cog server using:

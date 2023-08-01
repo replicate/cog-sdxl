@@ -6,9 +6,8 @@ import zipfile
 from cog import BaseModel, Input, Path
 
 from predict import SDXL_MODEL_CACHE, SDXL_URL, download_weights
-from trainer_pti import main
 from preprocess import preprocess
-
+from trainer_pti import main
 
 """
 Wrapper around actual trainer.
@@ -112,7 +111,6 @@ def train(
     ),
     verbose: bool = Input(description="verbose output", default=True),
 ) -> TrainingOutput:
-
     # Hard-code token_map for now. Make it configurable once we support multiple concepts or user-uploaded caption csv.
     token_map = token_string + ":2"
 

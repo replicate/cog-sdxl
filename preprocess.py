@@ -2,35 +2,29 @@
 # Have BLIP auto caption
 # Have CLIPSeg auto mask concept
 
-import glob
-import os
-from typing import List, Literal, Optional, Tuple, Union
-import os
 import gc
+import glob
 import mimetypes
+import os
 import shutil
-import tempfile
 import tarfile
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import List, Literal, Optional, Tuple, Union
+from zipfile import ZipFile
+
+import fire
+import mediapipe as mp
 import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import (
-    CLIPSegForImageSegmentation,
-    CLIPSegProcessor,
-    Swin2SRForImageSuperResolution,
-    Swin2SRImageProcessor,
-)
-import shutil
-import fire
-import zipfile
-import os
-from zipfile import ZipFile
-import mediapipe as mp
-from transformers import BlipForConditionalGeneration, BlipProcessor
-from pathlib import Path
-
+from transformers import (BlipForConditionalGeneration, BlipProcessor,
+                          CLIPSegForImageSegmentation, CLIPSegProcessor,
+                          Swin2SRForImageSuperResolution,
+                          Swin2SRImageProcessor)
 
 MODEL_PATH = "./cache"
 TEMP_OUT_DIR = "./temp/"
@@ -45,7 +39,7 @@ def preprocess(
     crop_based_on_salience: bool,
     use_face_detection_instead: bool,
     temp: float,
-    substitution_tokens: List[str]
+    substitution_tokens: List[str],
 ) -> Path:
     # assert str(files).endswith(".zip"), "files must be a zip file"
 
@@ -83,7 +77,6 @@ def preprocess(
 
     output_dir: str = TEMP_OUT_DIR
 
-
     load_and_save_masks_and_captions(
         files=TEMP_IN_DIR,
         output_dir=output_dir,
@@ -93,7 +86,7 @@ def preprocess(
         crop_based_on_salience=crop_based_on_salience,
         use_face_detection_instead=use_face_detection_instead,
         temp=temp,
-        substitution_tokens=substitution_tokens
+        substitution_tokens=substitution_tokens,
     )
 
     return Path(TEMP_OUT_DIR)
@@ -341,7 +334,7 @@ def load_and_save_masks_and_captions(
     use_face_detection_instead: bool = False,
     temp: float = 1.0,
     n_length: int = -1,
-    substitution_tokens: Optional[List[str]] = None
+    substitution_tokens: Optional[List[str]] = None,
 ):
     """
     Loads images from the given files, generates masks for them, and saves the masks and captions and upscale images
@@ -385,7 +378,9 @@ def load_and_save_masks_and_captions(
 
     # captions
     print(f"Generating {len(images)} captions...")
-    captions = blip_captioning_dataset(images, text=caption_text, substitution_tokens=substitution_tokens)
+    captions = blip_captioning_dataset(
+        images, text=caption_text, substitution_tokens=substitution_tokens
+    )
 
     if mask_target_prompts is None:
         mask_target_prompts = ""

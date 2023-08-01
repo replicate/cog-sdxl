@@ -5,16 +5,16 @@ import math
 import os
 import shutil
 from typing import Optional
-import numpy as np
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
-
 from diffusers.optimization import get_scheduler
 from safetensors.torch import save_file
 from tqdm.auto import tqdm
 
-from dataset_and_utils import PreprocessedDataset, TokenEmbeddingsHandler, load_models
+from dataset_and_utils import (PreprocessedDataset, TokenEmbeddingsHandler,
+                               load_models)
 
 
 def main(
