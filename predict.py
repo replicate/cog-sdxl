@@ -292,6 +292,7 @@ class Predictor(BasePredictor):
             # toggles watermark for this prediction
             watermark_cache = pipe.watermark
             pipe.watermark = None
+            self.refiner.watermark = None
 
         pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
         generator = torch.Generator("cuda").manual_seed(seed)
@@ -306,8 +307,6 @@ class Predictor(BasePredictor):
         output = pipe(**common_args, **sdxl_kwargs)
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
-            if not apply_watermark:
-                self.refiner.watermark = None
             refiner_kwargs = {
                 "image": output.images,
             }
@@ -321,8 +320,7 @@ class Predictor(BasePredictor):
         
         if not apply_watermark:
             pipe.watermark = watermark_cache
-            if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
-                self.refiner.watermark = watermark_cache
+            self.refiner.watermark = watermark_cache
         
         _, has_nsfw_content = self.run_safety_checker(output.images)
 
