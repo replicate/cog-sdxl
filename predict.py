@@ -249,6 +249,10 @@ class Predictor(BasePredictor):
             description="for base_image_refiner, the number of steps to refine, defaults to num_inference_steps",
             default=None,
         ),
+        apply_watermark: bool = Input(
+            description="Applies a watermark to enable determining if an image is generated in downstream applications. If you have other provisions for generating or deploying images safely, you can use this to disable watermarking.",
+            default=True
+        )
     ) -> List[Path]:
         """Run a single prediction on the model"""
         if seed is None:
@@ -284,6 +288,12 @@ class Predictor(BasePredictor):
         elif refine == "base_image_refiner":
             sdxl_kwargs["output_type"] = "latent"
 
+        if not apply_watermark:
+            # toggles watermark for this prediction
+            watermark_cache = pipe.watermark
+            pipe.watermark = None
+            self.refiner.watermark = None
+
         pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
         generator = torch.Generator("cuda").manual_seed(seed)
 
@@ -307,7 +317,11 @@ class Predictor(BasePredictor):
                 common_args["num_inference_steps"] = refine_steps
 
             output = self.refiner(**common_args, **refiner_kwargs)
-
+        
+        if not apply_watermark:
+            pipe.watermark = watermark_cache
+            self.refiner.watermark = watermark_cache
+        
         _, has_nsfw_content = self.run_safety_checker(output.images)
 
         output_paths = []
