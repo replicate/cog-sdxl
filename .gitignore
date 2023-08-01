@@ -1,0 +1,11 @@
+
+refiner-cache
+sdxl-cache
+.cog
+__pycache__
+wandb
+ft*
+*.ipynb
+dataset
+training_data
+training_out

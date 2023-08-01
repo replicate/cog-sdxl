@@ -1,0 +1,34 @@
+# Configuration for Cog ⚙️
+# Reference: https://github.com/replicate/cog/blob/main/docs/yaml.md
+
+build:
+  gpu: true
+  cuda: "11.8"
+  python_version: "3.11.1"
+  system_packages:
+    - "libgl1-mesa-glx"
+
+    - "ffmpeg"
+    - "libsm6"
+    - "libxext6"
+  python_packages:
+    - "git+https://github.com/huggingface/diffusers.git@34abee090750d22fef357bfb1ffd564c961b9e1d"
+    - "torch==2.0.1"
+    - "transformers==4.31.0"
+    - "invisible-watermark==0.2.0"
+    - "accelerate==0.21.0"
+    - "pandas==2.0.3"
+
+    - "torchvision==0.15.2"
+    - "numpy"
+    - "pandas"
+    - "fire"
+    - "opencv-python>=4.1.0.25"
+    - "mediapipe"
+
+
+  run:
+    - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.1/pget" && chmod +x /usr/local/bin/pget
+
+predict: "predict.py:Predictor"
+train: "train.py:train"
