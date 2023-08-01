@@ -260,7 +260,7 @@ class Predictor(BasePredictor):
             # consistency with fine-tuning API
             for k, v in self.token_map.items():
                 prompt = prompt.replace(k, v)
-
+        print(f"Prompt: {prompt}")
         if image and mask:
             print("inpainting mode")
             sdxl_kwargs["image"] = self.load_image(image)

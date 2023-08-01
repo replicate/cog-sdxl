@@ -2,6 +2,10 @@
 refiner-cache
 sdxl-cache
 safety-cache
+trained-model
+temp
+temp_in
+cache
 .cog
 __pycache__
 wandb
