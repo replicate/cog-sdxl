@@ -2,7 +2,7 @@
 
 <!-- #region -->
 <p align="center">
-<img  src="contents/monster_uni.png">
+<img  src="example_datasets/monster_uni.png">
 </p>
 <!-- #endregion -->
 
@@ -12,7 +12,7 @@
 
 # 1. Prepare your Image-Caption dataset
 
-Let's get started! First, we need to prepare an image-caption dataset. For this example, we will be fine-tuning SDXL 1.0 various multi-object images from [Unsplash](https://unsplash.com/) and [Zeke](https://twitter.com/zeke). The primary example is a zip file named [mix.zip](contents/mix.zip). This zip archive contains 5 images of a yellow clock and 5 images of a monster toy.
+Let's get started! First, we need to prepare an image-caption dataset. For this example, we will be fine-tuning SDXL 1.0 various multi-object images from [Unsplash](https://unsplash.com/) and [Zeke](https://twitter.com/zeke). 
 
 For our API, we need to prepare the dataset in the following format.
 
@@ -21,7 +21,7 @@ For our API, we need to prepare the dataset in the following format.
 
 1. Actual image files, either in jpg or png format
 2. All these files are compressed into a single `.zip` file
-3. One csv file which includes an `image_path`, `mask_path`, and `caption` for each image.
+3. A generic caption for each of these images with a placeholder token, such as `A photo of TOK`. 
 
 You can check out the example of a fully prepared folder that is usable with the fine-tuning api [here.](contents/coke)
 
@@ -175,7 +175,7 @@ pipe(prompt="A photo of <s2><s3><s4>").images[0].save("monster.png")
 
 <!-- #region -->
 <p align="center">
-<img  src="contents/monster.png">
+<img  src="example_datasets/monster.png">
 </p>
 <!-- #endregion -->
 
@@ -187,25 +187,18 @@ It works with humans and now provides exceptional results with SDXL 1.0.
 
 <!-- #region -->
 <p align="center">
-<img  src="contents/zeke_unicorn.png">
+<img  src="example_datasets/zeke_unicorn.png">
 </p>
 <!-- #endregion -->
 
-It works with game characters,
+It works with game characters!
 
 <!-- #region -->
 <p align="center">
-<img  src="contents/kiriko.png">
+<img  src="example_datasets/kiriko.png">
 </p>
 <!-- #endregion -->
 
-It works with products!
-
-<!-- #region -->
-<p align="center">
-<img  src="contents/clock.png">
-</p>
-<!-- #endregion -->
 
 Now, SDXL 1.0 is only a few days old, and we haven't quite figured out the most ideal parameters to use for everything. So we highly encourage experimentation, and would love to hear about your findings!
 

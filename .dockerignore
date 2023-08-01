@@ -15,6 +15,7 @@ training_data/
 temp/
 temp_in/
 cog_instance_data/
+example_datasets/
 trained_model.tar
 zeke_data.tar
 data.tar

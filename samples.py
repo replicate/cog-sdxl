@@ -1,7 +1,12 @@
-# first run the cog via:
-#    cog run -p 5000 python -m cog.server.http
-# then generate samples
-#    python samples.py
+
+"""
+A handy utility for verifying SDXL image generation locally. 
+To set up, first run a local cog server using:
+   cog run -p 5000 python -m cog.server.http
+Then, in a separate terminal, generate samples
+   python samples.py
+"""
+
 
 import base64
 import os
