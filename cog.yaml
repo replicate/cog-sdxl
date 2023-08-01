@@ -7,7 +7,6 @@ build:
   python_version: "3.11.1"
   system_packages:
     - "libgl1-mesa-glx"
-
     - "ffmpeg"
     - "libsm6"
     - "libxext6"
@@ -18,14 +17,12 @@ build:
     - "invisible-watermark==0.2.0"
     - "accelerate==0.21.0"
     - "pandas==2.0.3"
-
     - "torchvision==0.15.2"
-    - "numpy"
-    - "pandas"
-    - "fire"
+    - "numpy==1.25.1"
+    - "pandas==2.0.3"
+    - "fire==0.5.0"
     - "opencv-python>=4.1.0.25"
-    - "mediapipe"
-
+    - "mediapipe==0.10.2"
 
   run:
     - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.1/pget" && chmod +x /usr/local/bin/pget

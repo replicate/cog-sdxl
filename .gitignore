@@ -1,6 +1,7 @@
 
 refiner-cache
 sdxl-cache
+safety-cache
 .cog
 __pycache__
 wandb
