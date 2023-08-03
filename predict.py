@@ -54,7 +54,7 @@ def download_weights(url, dest):
     start = time.time()
     print("downloading url: ", url)
     print("downloading to: ", dest)
-    subprocess.check_output(["pget", "-x", url, dest])
+    subprocess.check_call(["pget", "-x", url, dest])
     print("downloading took: ", time.time() - start)
 
 
