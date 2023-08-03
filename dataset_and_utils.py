@@ -386,7 +386,9 @@ class TokenEmbeddingsHandler:
                     index_updates
                 ]
             )
-            new_embeddings = new_embeddings * std_token_embedding / new_embeddings.std()
+            off_ratio = std_token_embedding / new_embeddings.std()
+            
+            new_embeddings = new_embeddings * (off_ratio ** 0.1)
             text_encoder.text_model.embeddings.token_embedding.weight.data[
                 index_updates
             ] = new_embeddings
