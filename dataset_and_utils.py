@@ -314,6 +314,7 @@ class TokenEmbeddingsHandler:
             self.embeddings_settings[
                 f"original_embeddings_{idx}"
             ] = text_encoder.text_model.embeddings.token_embedding.weight.data.clone()
+            self.embeddings_settings[f"std_token_embedding_{idx}"] = std_token_embedding
 
             inu = torch.ones((len(tokenizer),), dtype=torch.bool)
             inu[self.train_ids] = False
@@ -374,6 +375,21 @@ class TokenEmbeddingsHandler:
                 .to(device=text_encoder.device)
                 .to(dtype=text_encoder.dtype)
             )
+
+            # for the parts that were updated, we need to normalize them
+            # to have the same std as before
+            std_token_embedding = self.embeddings_settings[f"std_token_embedding_{idx}"]
+
+            index_updates = ~index_no_updates
+            new_embeddings = (
+                text_encoder.text_model.embeddings.token_embedding.weight.data[
+                    index_updates
+                ]
+            )
+            new_embeddings = new_embeddings * std_token_embedding / new_embeddings.std()
+            text_encoder.text_model.embeddings.token_embedding.weight.data[
+                index_updates
+            ] = new_embeddings
 
     def load_embeddings(self, file_path: str):
         with safe_open(file_path, framework="pt", device=self.device.type) as f:
