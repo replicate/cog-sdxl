@@ -5,6 +5,7 @@ import math
 import os
 import shutil
 from typing import Optional
+import fnmatch
 
 import numpy as np
 import torch
@@ -13,8 +14,7 @@ from diffusers.optimization import get_scheduler
 from safetensors.torch import save_file
 from tqdm.auto import tqdm
 
-from dataset_and_utils import (PreprocessedDataset, TokenEmbeddingsHandler,
-                               load_models)
+from dataset_and_utils import PreprocessedDataset, TokenEmbeddingsHandler, load_models
 
 
 def main(
@@ -49,6 +49,8 @@ def main(
     token_dict={"TOKEN": "<s0>"},
     inserting_list_tokens=["<s0>"],
     verbose: bool = True,
+    is_lora=False,
+    lora_rank=32,
 ) -> None:
     if allow_tf32:
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -91,15 +93,6 @@ def main(
 
     unet_param_to_optimize = []
     # fine tune only attn weights
-    unet_param_to_optimize_names = []
-    for name, param in unet.named_parameters():
-        if "weight" in name and "norm" not in name:
-            param.requires_grad_(True)
-            unet_param_to_optimize.append(param)
-            unet_param_to_optimize_names.append(name)
-            print(name)
-        else:
-            param.requires_grad_(False)
 
     text_encoder_parameters = []
     for text_encoder in text_encoders:
@@ -111,23 +104,47 @@ def main(
             else:
                 param.requires_grad = False
 
-    # Optimizer creation
-    params_to_optimize = [
-        {
-            "params": unet_param_to_optimize,
-            "lr": unet_learning_rate,
-        },
-        {
-            "params": text_encoder_parameters,
-            "lr": ti_learning_rate_multiplier * unet_learning_rate,
-            "weight_decay": 1e-1,
-        },
-    ]
+    if not is_lora:
+        WHITELIST_PATTERNS = [
+            "*.attn*.weight",
+            "*ff*.weight",
+        ]  # TODO : make this a parameter
+        BLACKLIST_PATTERNS = ["*.norm*.weight"]
 
-    optimizer = torch.optim.AdamW(
-        params_to_optimize,
-        weight_decay=1e-4,
-    )
+        unet_param_to_optimize_names = []
+        for name, param in unet.named_parameters():
+            if any(
+                fnmatch.fnmatch(name, pattern) for pattern in WHITELIST_PATTERNS
+            ) and not any(
+                fnmatch.fnmatch(name, pattern) for pattern in BLACKLIST_PATTERNS
+            ):
+                param.requires_grad_(True)
+                unet_param_to_optimize_names.append(name)
+                print(f"Training: {name}")
+            else:
+                param.requires_grad_(False)
+
+        # Optimizer creation
+        params_to_optimize = [
+            {
+                "params": unet_param_to_optimize,
+                "lr": unet_learning_rate,
+            },
+            {
+                "params": text_encoder_parameters,
+                "lr": ti_learning_rate_multiplier * unet_learning_rate,
+                "weight_decay": 1e-1,
+            },
+        ]
+
+        optimizer = torch.optim.AdamW(
+            params_to_optimize,
+            weight_decay=1e-4,
+        )
+
+    else:
+        # Do lora-training instead.
+        pass
 
     print(f"# PTI : Loading dataset, do_cache {do_cache}")
 

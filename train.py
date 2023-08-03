@@ -40,7 +40,7 @@ def train(
     ),
     num_train_epochs: int = Input(
         description="Number of epochs to loop through your training dataset",
-        default=400,
+        default=4000,
     ),
     max_train_steps: int = Input(
         description="Number of individual training steps. Takes precedence over num_train_epochs",
@@ -52,11 +52,11 @@ def train(
     # ), # todo.
     unet_learning_rate: float = Input(
         description="Learning rate for the U-Net. We recommend this value to be somewhere between `1e-6` to `1e-5`.",
-        default=3e-6,
+        default=1e-6,
     ),
     ti_learning_rate_multiplier: float = Input(
         description="Scaling of learning rate for training textual inversion embeddings. Don't alter unless you know what you're doing.",
-        default=100,
+        default=1000,
     ),
     lr_scheduler: str = Input(
         description="Learning rate scheduler to use for training",
@@ -64,22 +64,11 @@ def train(
         choices=[
             "constant",
             "linear",
-            "cosine",
-            "cosine_with_restarts",
-            "polynomial",
-            "constant_with_warmup",
         ],
     ),
     lr_warmup_steps: int = Input(
         description="Number of warmup steps for lr schedulers with warmups.",
-        default=500,
-    ),
-    lr_num_cycles: int = Input(
-        description="Number of hard restarts used with `cosine_with_restarts` learning rate scheduler",
-        default=1,
-    ),
-    lr_power: float = Input(
-        description="Power for polynomial learning rate scheduler", default=1.0
+        default=100,
     ),
     token_string: str = Input(
         description="A unique string that will be trained to refer to the concept in the input images. Can be anything, but TOK works well",
@@ -103,16 +92,20 @@ def train(
     ),
     use_face_detection_instead: bool = Input(
         description="If you want to use face detection instead of CLIPSeg for masking. For face applications, we recommend using this option.",
-        default=False,
+        default=True,
     ),
     clipseg_temperature: float = Input(
         description="How blurry you want the CLIPSeg mask to be. We recommend this value be something between `0.5` to `1.0`. If you want to have more sharp mask (but thus more errorful), you can decrease this value.",
         default=1.0,
     ),
     verbose: bool = Input(description="verbose output", default=True),
+    checkpointing_steps: int = Input(
+        description="Number of steps between saving checkpoints. Set to very very high number to disable checkpointing, because you don't need one.",
+        default=200,
+    ),
 ) -> TrainingOutput:
     # Hard-code token_map for now. Make it configurable once we support multiple concepts or user-uploaded caption csv.
-    token_map = token_string + ":2"
+    token_map = token_string + ":3"
 
     # Process 'token_to_train' and 'input_data_tar_or_zip'
     inserting_list_tokens = token_map.split(",")
@@ -161,15 +154,13 @@ def train(
         ti_learning_rate_multiplier=ti_learning_rate_multiplier,
         lr_scheduler=lr_scheduler,
         lr_warmup_steps=lr_warmup_steps,
-        lr_num_cycles=lr_num_cycles,
-        lr_power=lr_power,
         token_dict=token_dict,
         inserting_list_tokens=all_token_lists,
         verbose=verbose,
         crops_coords_top_left_h=0,
         crops_coords_top_left_w=0,
         do_cache=True,
-        checkpointing_steps=500000,
+        checkpointing_steps=checkpointing_steps,
         scale_lr=False,
         dataloader_num_workers=0,
         max_grad_norm=1.0,
