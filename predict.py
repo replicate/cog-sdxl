@@ -9,14 +9,20 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from cog import BasePredictor, Input, Path
-from diffusers import (DDIMScheduler, DiffusionPipeline,
-                       DPMSolverMultistepScheduler,
-                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
-                       HeunDiscreteScheduler, PNDMScheduler,
-                       StableDiffusionXLImg2ImgPipeline,
-                       StableDiffusionXLInpaintPipeline)
-from diffusers.pipelines.stable_diffusion.safety_checker import \
-    StableDiffusionSafetyChecker
+from diffusers import (
+    DDIMScheduler,
+    DiffusionPipeline,
+    DPMSolverMultistepScheduler,
+    EulerAncestralDiscreteScheduler,
+    EulerDiscreteScheduler,
+    HeunDiscreteScheduler,
+    PNDMScheduler,
+    StableDiffusionXLImg2ImgPipeline,
+    StableDiffusionXLInpaintPipeline,
+)
+from diffusers.pipelines.stable_diffusion.safety_checker import (
+    StableDiffusionSafetyChecker,
+)
 from diffusers.utils import load_image
 from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
@@ -251,8 +257,8 @@ class Predictor(BasePredictor):
         ),
         apply_watermark: bool = Input(
             description="Applies a watermark to enable determining if an image is generated in downstream applications. If you have other provisions for generating or deploying images safely, you can use this to disable watermarking.",
-            default=True
-        )
+            default=True,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model"""
         if seed is None:
@@ -317,11 +323,11 @@ class Predictor(BasePredictor):
                 common_args["num_inference_steps"] = refine_steps
 
             output = self.refiner(**common_args, **refiner_kwargs)
-        
+
         if not apply_watermark:
             pipe.watermark = watermark_cache
             self.refiner.watermark = watermark_cache
-        
+
         _, has_nsfw_content = self.run_safety_checker(output.images)
 
         output_paths = []

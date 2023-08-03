@@ -21,10 +21,14 @@ import pandas as pd
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import (BlipForConditionalGeneration, BlipProcessor,
-                          CLIPSegForImageSegmentation, CLIPSegProcessor,
-                          Swin2SRForImageSuperResolution,
-                          Swin2SRImageProcessor)
+from transformers import (
+    BlipForConditionalGeneration,
+    BlipProcessor,
+    CLIPSegForImageSegmentation,
+    CLIPSegProcessor,
+    Swin2SRForImageSuperResolution,
+    Swin2SRImageProcessor,
+)
 
 MODEL_PATH = "./cache"
 TEMP_OUT_DIR = "./temp/"
