@@ -9,27 +9,17 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from cog import BasePredictor, Input, Path
-from diffusers import (
-    DDIMScheduler,
-    DiffusionPipeline,
-    DPMSolverMultistepScheduler,
-    EulerAncestralDiscreteScheduler,
-    EulerDiscreteScheduler,
-    HeunDiscreteScheduler,
-    PNDMScheduler,
-    StableDiffusionXLImg2ImgPipeline,
-    StableDiffusionXLInpaintPipeline,
-)
-
-from safetensors import safe_open
-
+from diffusers import (DDIMScheduler, DiffusionPipeline,
+                       DPMSolverMultistepScheduler,
+                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
+                       HeunDiscreteScheduler, PNDMScheduler,
+                       StableDiffusionXLImg2ImgPipeline,
+                       StableDiffusionXLInpaintPipeline)
 from diffusers.models.attention_processor import LoRAAttnProcessor2_0
-
-
-from diffusers.pipelines.stable_diffusion.safety_checker import (
-    StableDiffusionSafetyChecker,
-)
+from diffusers.pipelines.stable_diffusion.safety_checker import \
+    StableDiffusionSafetyChecker
 from diffusers.utils import load_image
+from safetensors import safe_open
 from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
 

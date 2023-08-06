@@ -8,27 +8,21 @@ import mimetypes
 import os
 import shutil
 import tarfile
-import tempfile
-import zipfile
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from zipfile import ZipFile
 
-import fire
+import cv2
 import mediapipe as mp
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image
+from PIL import Image, ImageFilter
 from tqdm import tqdm
-from transformers import (
-    BlipForConditionalGeneration,
-    BlipProcessor,
-    CLIPSegForImageSegmentation,
-    CLIPSegProcessor,
-    Swin2SRForImageSuperResolution,
-    Swin2SRImageProcessor,
-)
+from transformers import (BlipForConditionalGeneration, BlipProcessor,
+                          CLIPSegForImageSegmentation, CLIPSegProcessor,
+                          Swin2SRForImageSuperResolution,
+                          Swin2SRImageProcessor)
 
 MODEL_PATH = "./cache"
 TEMP_OUT_DIR = "./temp/"
@@ -243,46 +237,90 @@ def blip_captioning_dataset(
     return captions
 
 
+
 def face_mask_google_mediapipe(
-    images: List[Image.Image], blur_amount: float = 80.0, bias: float = 0.05
+    images: List[Image.Image], blur_amount: float = 20.0, bias: float = 0.05
 ) -> List[Image.Image]:
     """
-    Returns a list of images with mask on the face parts.
+    Returns a list of images with masks on the face parts.
     """
     mp_face_detection = mp.solutions.face_detection
+    mp_face_mesh = mp.solutions.face_mesh
 
     face_detection = mp_face_detection.FaceDetection(
         model_selection=1, min_detection_confidence=0.5
     )
+    face_mesh = mp_face_mesh.FaceMesh(
+        static_image_mode=True, max_num_faces=1, min_detection_confidence=0.5
+    )
 
     masks = []
     for image in tqdm(images):
-        image = np.array(image)
+        image_np = np.array(image)
 
-        results = face_detection.process(image)
-        black_image = np.ones((image.shape[0], image.shape[1]), dtype=np.uint8)
+        # Perform face detection
+        results_detection = face_detection.process(image_np)
 
-        if results.detections:
-            for detection in results.detections:
-                x_min = int(
-                    detection.location_data.relative_bounding_box.xmin * image.shape[1]
-                )
-                y_min = int(
-                    detection.location_data.relative_bounding_box.ymin * image.shape[0]
-                )
-                width = int(
-                    detection.location_data.relative_bounding_box.width * image.shape[1]
-                )
-                height = int(
-                    detection.location_data.relative_bounding_box.height
-                    * image.shape[0]
+        if results_detection.detections:
+            for detection in results_detection.detections:
+                bboxC = detection.location_data.relative_bounding_box
+                ih, iw, _ = image_np.shape
+                bbox = (
+                    int(bboxC.xmin * iw),
+                    int(bboxC.ymin * ih),
+                    int(bboxC.width * iw),
+                    int(bboxC.height * ih),
                 )
 
-                # draw the colored rectangle
-                black_image[y_min : y_min + height, x_min : x_min + width] = 255
+                # Extract face landmarks
+                face_landmarks = face_mesh.process(
+                    image_np[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
+                ).multi_face_landmarks
+                
+                
+                indexes = [
+                    10,  338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+                    397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+                    172, 58,  132, 93,  234, 127, 162, 21,  54,  103, 67,  109
+                ]
+                
+                
+                if face_landmarks:
+                    mask = Image.new("L", (iw, ih), 0)
+                    mask_np = np.array(mask)
 
-        black_image = Image.fromarray(black_image)
-        masks.append(black_image)
+                    for face_landmark in face_landmarks:
+                        face_landmark = [face_landmark.landmark[idx] for idx in indexes]
+                        landmark_points = [
+                            (int(l.x * bbox[2]) + bbox[0], int(l.y * bbox[3]) + bbox[1])
+                            for l in face_landmark
+                        ]
+                        mask_np = cv2.fillPoly(mask_np, [np.array(landmark_points)], 255)
+
+                    mask = Image.fromarray(mask_np)
+
+                    # Apply blur to the mask
+                    if blur_amount > 0:
+                        mask = mask.filter(ImageFilter.GaussianBlur(blur_amount))
+
+                    # Apply bias to the mask
+                    if bias > 0:
+                        mask = np.array(mask)
+                        mask = mask + bias * np.ones(mask.shape, dtype=mask.dtype)
+                        mask = np.clip(mask, 0, 255)
+                        mask = Image.fromarray(mask)
+
+                    # Convert mask to 'L' mode (grayscale) before saving
+                    mask = mask.convert("L")
+
+                    masks.append(mask)
+                else:
+                    # If face landmarks are not available, add a black mask of the same size as the image
+                    masks.append(Image.new("L", (iw, ih), 0))
+
+        else:
+            # If no face is detected, add a black mask of the same size as the image
+            masks.append(Image.new("L", (iw, ih), 0))
 
     return masks
 
@@ -318,9 +356,9 @@ def _center_of_mass(mask: Image.Image):
     Returns the center of mass of the mask
     """
     x, y = np.meshgrid(np.arange(mask.size[0]), np.arange(mask.size[1]))
-
-    x_ = x * np.array(mask)
-    y_ = y * np.array(mask)
+    mask_np = np.array(mask) + 0.01
+    x_ = x * mask_np
+    y_ = y * mask_np
 
     x = np.sum(x_) / np.sum(mask)
     y = np.sum(y_) / np.sum(mask)

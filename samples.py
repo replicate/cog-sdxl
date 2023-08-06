@@ -9,8 +9,9 @@ Then, in a separate terminal, generate samples
 
 import base64
 import os
-import requests
 import sys
+
+import requests
 
 
 def gen(output_fn, **kwargs):
