@@ -44,7 +44,7 @@ def train(
     ),
     max_train_steps: int = Input(
         description="Number of individual training steps. Takes precedence over num_train_epochs",
-        default=2000,
+        default=1000,
     ),
     # gradient_accumulation_steps: int = Input(
     #     description="Number of training steps to accumulate before a backward pass. Effective batch size = gradient_accumulation_steps * batch_size",
@@ -104,7 +104,7 @@ def train(
     ),
     use_face_detection_instead: bool = Input(
         description="If you want to use face detection instead of CLIPSeg for masking. For face applications, we recommend using this option.",
-        default=True,
+        default=False,
     ),
     clipseg_temperature: float = Input(
         description="How blurry you want the CLIPSeg mask to be. We recommend this value be something between `0.5` to `1.0`. If you want to have more sharp mask (but thus more errorful), you can decrease this value.",
