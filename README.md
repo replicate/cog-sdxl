@@ -10,6 +10,13 @@
 
 - In this post, we will be fine-tuning SDXL 1.0 with replicate api. Every detail will be shared.
 
+Basic Cog usage:
+
+`cog predict -i prompt="a photo of a wild dog"`
+
+`cog train -i input_images=@"example_datasets/zeke.zip"`
+
+
 # 1. Prepare your Image-Caption dataset
 
 Let's get started! First, we need to prepare an image-caption dataset. For this example, we will be fine-tuning SDXL 1.0 various multi-object images from [Unsplash](https://unsplash.com/) and [Zeke](https://twitter.com/zeke). 
@@ -154,6 +161,7 @@ pipe = DiffusionPipeline.from_pretrained(
         variant="fp16",
 ).to("cuda")
 
+tensors = {}
 with safe_open("training_out/unet.safetensors", framework="pt", device="cuda") as f:
     for key in f.keys():
        tensors[key] = f.get_tensor(key)

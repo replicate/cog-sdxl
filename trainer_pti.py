@@ -1,5 +1,5 @@
 # Bootstrapped from Huggingface diffuser's code.
-
+from typing import List
 import json
 import math
 import os
@@ -11,10 +11,16 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from diffusers.optimization import get_scheduler
+from diffusers.models.attention_processor import LoRAAttnProcessor, LoRAAttnProcessor2_0
 from safetensors.torch import save_file
 from tqdm.auto import tqdm
 
-from dataset_and_utils import PreprocessedDataset, TokenEmbeddingsHandler, load_models
+from dataset_and_utils import (
+    PreprocessedDataset,
+    TokenEmbeddingsHandler,
+    load_models,
+    unet_attn_processors_state_dict,
+)
 
 
 def main(
@@ -35,7 +41,9 @@ def main(
     checkpointing_steps: int = 500000,  # default to no checkpoints
     gradient_accumulation_steps: int = 1,  # todo
     unet_learning_rate: float = 1e-5,
-    ti_learning_rate_multiplier: float = 40,
+    ti_lr: float = 3e-4,
+    lora_lr: float = 1e-4,
+    pivot_halfway: bool = True,
     scale_lr: bool = False,
     lr_scheduler: str = "constant",
     lr_warmup_steps: int = 500,
@@ -45,12 +53,12 @@ def main(
     max_grad_norm: float = 1.0,  # todo with tests
     allow_tf32: bool = True,
     mixed_precision: Optional[str] = "bf16",
-    device="cuda:0",
-    token_dict={"TOKEN": "<s0>"},
-    inserting_list_tokens=["<s0>"],
+    device: str = "cuda:0",
+    token_dict: dict = {"TOKEN": "<s0>"},
+    inserting_list_tokens: List[str] = ["<s0>"],
     verbose: bool = True,
-    is_lora=False,
-    lora_rank=32,
+    is_lora: bool = True,
+    lora_rank: int = 32,
 ) -> None:
     if allow_tf32:
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -106,10 +114,11 @@ def main(
 
     if not is_lora:
         WHITELIST_PATTERNS = [
-            "*.attn*.weight",
-            "*ff*.weight",
+            # "*.attn*.weight",
+            # "*ff*.weight",
+            "*"
         ]  # TODO : make this a parameter
-        BLACKLIST_PATTERNS = ["*.norm*.weight"]
+        BLACKLIST_PATTERNS = ["*.norm*.weight", "*time*"]
 
         unet_param_to_optimize_names = []
         for name, param in unet.named_parameters():
@@ -132,19 +141,58 @@ def main(
             },
             {
                 "params": text_encoder_parameters,
-                "lr": ti_learning_rate_multiplier * unet_learning_rate,
-                "weight_decay": 1e-1,
+                "lr": ti_lr,
+                "weight_decay": 1e-3,
             },
         ]
 
-        optimizer = torch.optim.AdamW(
-            params_to_optimize,
-            weight_decay=1e-4,
-        )
-
     else:
         # Do lora-training instead.
-        pass
+        unet.requires_grad_(False)
+        unet_lora_attn_procs = {}
+        unet_lora_parameters = []
+        for name, attn_processor in unet.attn_processors.items():
+            cross_attention_dim = (
+                None
+                if name.endswith("attn1.processor")
+                else unet.config.cross_attention_dim
+            )
+            if name.startswith("mid_block"):
+                hidden_size = unet.config.block_out_channels[-1]
+            elif name.startswith("up_blocks"):
+                block_id = int(name[len("up_blocks.")])
+                hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
+            elif name.startswith("down_blocks"):
+                block_id = int(name[len("down_blocks.")])
+                hidden_size = unet.config.block_out_channels[block_id]
+
+            module = LoRAAttnProcessor2_0(
+                hidden_size=hidden_size,
+                cross_attention_dim=cross_attention_dim,
+                rank=lora_rank,
+            )
+            unet_lora_attn_procs[name] = module
+            module.to(device)
+            unet_lora_parameters.extend(module.parameters())
+
+        unet.set_attn_processor(unet_lora_attn_procs)
+
+        params_to_optimize = [
+            {
+                "params": unet_lora_parameters,
+                "lr": lora_lr,
+            },
+            {
+                "params": text_encoder_parameters,
+                "lr": ti_lr,
+                "weight_decay": 1e-3,
+            },
+        ]
+
+    optimizer = torch.optim.AdamW(
+        params_to_optimize,
+        weight_decay=1e-4,
+    )
 
     print(f"# PTI : Loading dataset, do_cache {do_cache}")
 
@@ -213,6 +261,16 @@ def main(
     os.makedirs(f"{checkpoint_dir}/embeddings", exist_ok=True)
 
     for epoch in range(first_epoch, num_train_epochs):
+        if pivot_halfway:
+            if epoch == num_train_epochs // 2:
+                print("# PTI :  Pivot halfway")
+                # remove text encoder parameters from optimizer
+                params_to_optimize = params_to_optimize[:1]
+                optimizer = torch.optim.AdamW(
+                    params_to_optimize,
+                    weight_decay=1e-4,
+                )
+
         unet.train()
         for step, batch in enumerate(train_dataloader):
             progress_bar.update(1)
@@ -290,32 +348,48 @@ def main(
 
             if global_step % checkpointing_steps == 0:
                 # save the required params of unet with safetensor
-                tensors = {
-                    name: param
-                    for name, param in unet.named_parameters()
-                    if name in unet_param_to_optimize_names
-                }
-                save_file(
-                    tensors,
-                    f"{checkpoint_dir}/unet/checkpoint-{global_step}.unet.safetensors",
-                )
 
-                # mkdir for embeddings
-                os.makedirs(f"{checkpoint_dir}/embeddings", exist_ok=True)
+                if not is_lora:
+                    tensors = {
+                        name: param
+                        for name, param in unet.named_parameters()
+                        if name in unet_param_to_optimize_names
+                    }
+                    save_file(
+                        tensors,
+                        f"{checkpoint_dir}/unet/checkpoint-{global_step}.unet.safetensors",
+                    )
+
+                else:
+                    lora_tensors = unet_attn_processors_state_dict(unet)
+
+                    save_file(
+                        lora_tensors,
+                        f"{checkpoint_dir}/unet/checkpoint-{global_step}.lora.safetensors",
+                    )
+
                 embedding_handler.save_embeddings(
                     f"{checkpoint_dir}/embeddings/checkpoint-{global_step}.pti",
                 )
+
     # final_save
     print("Saving final model for return")
-    tensors = {
-        name: param
-        for name, param in unet.named_parameters()
-        if name in unet_param_to_optimize_names
-    }
-    save_file(
-        tensors,
-        f"{output_dir}/unet.safetensors",
-    )
+    if not is_lora:
+        tensors = {
+            name: param
+            for name, param in unet.named_parameters()
+            if name in unet_param_to_optimize_names
+        }
+        save_file(
+            tensors,
+            f"{output_dir}/unet.safetensors",
+        )
+    else:
+        lora_tensors = unet_attn_processors_state_dict(unet)
+        save_file(
+            lora_tensors,
+            f"{output_dir}/lora.safetensors",
+        )
 
     embedding_handler.save_embeddings(
         f"{output_dir}/embeddings.pti",

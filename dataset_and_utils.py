@@ -267,6 +267,24 @@ def load_models(pretrained_model_name_or_path, revision, device, weight_dtype):
     )
 
 
+def unet_attn_processors_state_dict(unet) -> Dict[str, torch.tensor]:
+    """
+    Returns:
+        a state dict containing just the attention processor parameters.
+    """
+    attn_processors = unet.attn_processors
+
+    attn_processors_state_dict = {}
+
+    for attn_processor_key, attn_processor in attn_processors.items():
+        for parameter_key, parameter in attn_processor.state_dict().items():
+            attn_processors_state_dict[
+                f"{attn_processor_key}.{parameter_key}"
+            ] = parameter
+
+    return attn_processors_state_dict
+
+
 class TokenEmbeddingsHandler:
     def __init__(self, text_encoders, tokenizers):
         self.text_encoders = text_encoders
@@ -387,8 +405,8 @@ class TokenEmbeddingsHandler:
                 ]
             )
             off_ratio = std_token_embedding / new_embeddings.std()
-            
-            new_embeddings = new_embeddings * (off_ratio ** 0.1)
+
+            new_embeddings = new_embeddings * (off_ratio**0.1)
             text_encoder.text_model.embeddings.token_embedding.weight.data[
                 index_updates
             ] = new_embeddings

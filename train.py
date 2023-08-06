@@ -44,7 +44,7 @@ def train(
     ),
     max_train_steps: int = Input(
         description="Number of individual training steps. Takes precedence over num_train_epochs",
-        default=None,
+        default=2000,
     ),
     # gradient_accumulation_steps: int = Input(
     #     description="Number of training steps to accumulate before a backward pass. Effective batch size = gradient_accumulation_steps * batch_size",
@@ -54,9 +54,17 @@ def train(
         description="Learning rate for the U-Net. We recommend this value to be somewhere between `1e-6` to `1e-5`.",
         default=1e-6,
     ),
-    ti_learning_rate_multiplier: float = Input(
+    ti_lr: float = Input(
         description="Scaling of learning rate for training textual inversion embeddings. Don't alter unless you know what you're doing.",
-        default=1000,
+        default=3e-4,
+    ),
+    lora_lr: float = Input(
+        description="Scaling of learning rate for training LoRA embeddings. Don't alter unless you know what you're doing.",
+        default=1e-4,
+    ),
+    lora_rank: int = Input(
+        description="Rank of LoRA embeddings. Don't alter unless you know what you're doing.",
+        default=32,
     ),
     lr_scheduler: str = Input(
         description="Learning rate scheduler to use for training",
@@ -105,7 +113,7 @@ def train(
     ),
 ) -> TrainingOutput:
     # Hard-code token_map for now. Make it configurable once we support multiple concepts or user-uploaded caption csv.
-    token_map = token_string + ":3"
+    token_map = token_string + ":2"
 
     # Process 'token_to_train' and 'input_data_tar_or_zip'
     inserting_list_tokens = token_map.split(",")
@@ -151,22 +159,20 @@ def train(
         max_train_steps=max_train_steps,
         gradient_accumulation_steps=1,
         unet_learning_rate=unet_learning_rate,
-        ti_learning_rate_multiplier=ti_learning_rate_multiplier,
+        ti_lr=ti_lr,
+        lora_lr=lora_lr,
         lr_scheduler=lr_scheduler,
         lr_warmup_steps=lr_warmup_steps,
         token_dict=token_dict,
         inserting_list_tokens=all_token_lists,
         verbose=verbose,
-        crops_coords_top_left_h=0,
-        crops_coords_top_left_w=0,
-        do_cache=True,
         checkpointing_steps=checkpointing_steps,
         scale_lr=False,
-        dataloader_num_workers=0,
         max_grad_norm=1.0,
         allow_tf32=True,
         mixed_precision="bf16",
         device="cuda:0",
+        lora_rank=lora_rank,
     )
 
     directory = Path(OUTPUT_DIR)

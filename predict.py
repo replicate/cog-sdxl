@@ -20,6 +20,12 @@ from diffusers import (
     StableDiffusionXLImg2ImgPipeline,
     StableDiffusionXLInpaintPipeline,
 )
+
+from safetensors import safe_open
+
+from diffusers.models.attention_processor import LoRAAttnProcessor2_0
+
+
 from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
@@ -77,12 +83,59 @@ class Predictor(BasePredictor):
 
         # load UNET
         print("Loading fine-tuned model")
-        new_unet_params = load_file(
-            os.path.join(local_weights_cache, "unet.safetensors")
-        )
-        sd = pipe.unet.state_dict()
-        sd.update(new_unet_params)
-        pipe.unet.load_state_dict(sd)
+        self.is_lora = False
+
+        maybe_unet_path = os.path.join(local_weights_cache, "unet.safetensors")
+        if not os.path.exists(maybe_unet_path):
+            print("Does not have Unet. assume we are using LoRA")
+            self.is_lora = True
+
+        if not self.is_lora:
+            print("Loading Unet")
+
+            new_unet_params = load_file(
+                os.path.join(local_weights_cache, "unet.safetensors")
+            )
+            sd = pipe.unet.state_dict()
+            sd.update(new_unet_params)
+            pipe.unet.load_state_dict(sd)
+
+        else:
+            print("Loading Unet LoRA")
+
+            unet = pipe.unet
+
+            tensors = load_file(os.path.join(local_weights_cache, "lora.safetensors"))
+
+            unet = pipe.unet
+            unet_lora_attn_procs = {}
+
+            for name, attn_processor in unet.attn_processors.items():
+                cross_attention_dim = (
+                    None
+                    if name.endswith("attn1.processor")
+                    else unet.config.cross_attention_dim
+                )
+                if name.startswith("mid_block"):
+                    hidden_size = unet.config.block_out_channels[-1]
+                elif name.startswith("up_blocks"):
+                    block_id = int(name[len("up_blocks.")])
+                    hidden_size = list(reversed(unet.config.block_out_channels))[
+                        block_id
+                    ]
+                elif name.startswith("down_blocks"):
+                    block_id = int(name[len("down_blocks.")])
+                    hidden_size = unet.config.block_out_channels[block_id]
+
+                module = LoRAAttnProcessor2_0(
+                    hidden_size=hidden_size,
+                    cross_attention_dim=cross_attention_dim,
+                    rank=32,
+                )
+                unet_lora_attn_procs[name] = module.to("cuda")
+
+            unet.set_attn_processor(unet_lora_attn_procs)
+            unet.load_state_dict(tensors, strict=False)
 
         # load text
         handler = TokenEmbeddingsHandler(
@@ -120,7 +173,7 @@ class Predictor(BasePredictor):
             use_safetensors=True,
             variant="fp16",
         )
-        if weights:
+        if weights:  # or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
 
         self.txt2img_pipe.to("cuda")
@@ -258,6 +311,9 @@ class Predictor(BasePredictor):
         apply_watermark: bool = Input(
             description="Applies a watermark to enable determining if an image is generated in downstream applications. If you have other provisions for generating or deploying images safely, you can use this to disable watermarking.",
             default=True,
+        ),
+        lora_scale: float = Input(
+            description="LoRA additive scale.", ge=0.0, le=1.0, default=1.0
         ),
     ) -> List[Path]:
         """Run a single prediction on the model"""

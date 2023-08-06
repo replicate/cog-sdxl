@@ -14,3 +14,7 @@ ft*
 dataset
 training_data
 training_out
+output*
+training_out*
+trained_model.tar
+checkpoint*
