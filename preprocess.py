@@ -277,7 +277,8 @@ def face_mask_google_mediapipe(
                     image_np[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
                 ).multi_face_landmarks
                 
-                
+                # https://github.com/google/mediapipe/issues/1615
+                # This was def helpful
                 indexes = [
                     10,  338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
                     397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
