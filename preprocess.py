@@ -239,7 +239,7 @@ def blip_captioning_dataset(
 
 
 def face_mask_google_mediapipe(
-    images: List[Image.Image], blur_amount: float = 20.0, bias: float = 0.05
+    images: List[Image.Image], blur_amount: float = 0.0, bias: float = 50.0
 ) -> List[Image.Image]:
     """
     Returns a list of images with masks on the face parts.
@@ -248,10 +248,10 @@ def face_mask_google_mediapipe(
     mp_face_mesh = mp.solutions.face_mesh
 
     face_detection = mp_face_detection.FaceDetection(
-        model_selection=1, min_detection_confidence=0.5
+        model_selection=1, min_detection_confidence=0.2
     )
     face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=True, max_num_faces=1, min_detection_confidence=0.5
+        static_image_mode=True, max_num_faces=1, min_detection_confidence=0.2
     )
 
     masks = []
@@ -361,8 +361,8 @@ def _center_of_mass(mask: Image.Image):
     x_ = x * mask_np
     y_ = y * mask_np
 
-    x = np.sum(x_) / np.sum(mask)
-    y = np.sum(y_) / np.sum(mask)
+    x = np.sum(x_) / np.sum(mask_np)
+    y = np.sum(y_) / np.sum(mask_np)
 
     return x, y
 
