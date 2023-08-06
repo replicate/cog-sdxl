@@ -18,3 +18,4 @@ output*
 training_out*
 trained_model.tar
 checkpoint*
+weights

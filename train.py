@@ -50,6 +50,10 @@ def train(
     #     description="Number of training steps to accumulate before a backward pass. Effective batch size = gradient_accumulation_steps * batch_size",
     #     default=1,
     # ), # todo.
+    is_lora: bool = Input(
+        description="Whether to use LoRA training. If set to False, will use Full fine tuning",
+        default=True,
+    ),
     unet_learning_rate: float = Input(
         description="Learning rate for the U-Net. We recommend this value to be somewhere between `1e-6` to `1e-5`.",
         default=1e-6,
@@ -173,6 +177,7 @@ def train(
         mixed_precision="bf16",
         device="cuda:0",
         lora_rank=lora_rank,
+        is_lora=is_lora,
     )
 
     directory = Path(OUTPUT_DIR)

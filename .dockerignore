@@ -23,3 +23,6 @@ data.tar
 zeke.zip
 sketch-mountains-input.jpeg
 training_out*
+weights
+inference_*
+trained-model

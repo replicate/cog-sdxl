@@ -313,7 +313,7 @@ class Predictor(BasePredictor):
             default=True,
         ),
         lora_scale: float = Input(
-            description="LoRA additive scale.", ge=0.0, le=1.0, default=1.0
+            description="LoRA additive scale.", ge=0.0, le=1.0, default=0.6
         ),
     ) -> List[Path]:
         """Run a single prediction on the model"""
@@ -366,7 +366,9 @@ class Predictor(BasePredictor):
             "generator": generator,
             "num_inference_steps": num_inference_steps,
         }
-        output = pipe(**common_args, **sdxl_kwargs)
+        output = pipe(
+            **common_args, **sdxl_kwargs, cross_attention_kwargs={"scale": lora_scale}
+        )
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
             refiner_kwargs = {
