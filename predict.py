@@ -163,6 +163,7 @@ class Predictor(BasePredictor):
             use_safetensors=True,
             variant="fp16",
         )
+        self.is_lora = False
         if weights:  # or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
 
@@ -356,9 +357,11 @@ class Predictor(BasePredictor):
             "generator": generator,
             "num_inference_steps": num_inference_steps,
         }
-        output = pipe(
-            **common_args, **sdxl_kwargs, cross_attention_kwargs={"scale": lora_scale}
-        )
+
+        if self.is_lora:
+            sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
+
+        output = pipe(**common_args, **sdxl_kwargs)
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
             refiner_kwargs = {
