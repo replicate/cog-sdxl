@@ -266,7 +266,7 @@ class Predictor(BasePredictor):
         scheduler: str = Input(
             description="scheduler",
             choices=SCHEDULERS.keys(),
-            default="DDIM",
+            default="K_EULER",
         ),
         num_inference_steps: int = Input(
             description="Number of denoising steps", ge=1, le=500, default=50
@@ -289,13 +289,13 @@ class Predictor(BasePredictor):
             default="no_refiner",
         ),
         high_noise_frac: float = Input(
-            description="for expert_ensemble_refiner, the fraction of noise to use",
+            description="For expert_ensemble_refiner, the fraction of noise to use",
             default=0.8,
             le=1.0,
             ge=0.0,
         ),
         refine_steps: int = Input(
-            description="for base_image_refiner, the number of steps to refine, defaults to num_inference_steps",
+            description="For base_image_refiner, the number of steps to refine, defaults to num_inference_steps",
             default=None,
         ),
         apply_watermark: bool = Input(
@@ -303,7 +303,7 @@ class Predictor(BasePredictor):
             default=True,
         ),
         lora_scale: float = Input(
-            description="LoRA additive scale.", ge=0.0, le=1.0, default=0.6
+            description="LoRA additive scale. Only applicable on trained models.", ge=0.0, le=1.0, default=0.6
         ),
     ) -> List[Path]:
         """Run a single prediction on the model"""
