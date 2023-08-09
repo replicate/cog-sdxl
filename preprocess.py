@@ -405,9 +405,9 @@ def load_and_save_masks_and_captions(
         if os.path.isdir(files):
             # get all the .png .jpg in the directory
             files = (
-                _find_files(files, "*.png")
-                + _find_files(files, "*.jpg")
-                + _find_files(files, "*.jpeg"),
+                _find_files("*.png", files)
+                + _find_files("*.jpg", files)
+                + _find_files("*.jpeg", files),
             )
 
         if len(files) == 0:
