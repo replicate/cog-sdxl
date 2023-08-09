@@ -3,9 +3,10 @@
 # Have CLIPSeg auto mask concept
 
 import gc
-import glob
+import fnmatch
 import mimetypes
 import os
+import re
 import shutil
 import tarfile
 from pathlib import Path
@@ -404,9 +405,9 @@ def load_and_save_masks_and_captions(
         if os.path.isdir(files):
             # get all the .png .jpg in the directory
             files = (
-                glob.glob(os.path.join(files, "*.png"))
-                + glob.glob(os.path.join(files, "*.jpg"))
-                + glob.glob(os.path.join(files, "*.jpeg"))
+                _find_files(files, "*.png")
+                + _find_files(files, "*.jpg")
+                + _find_files(files, "*.jpeg"),
             )
 
         if len(files) == 0:
@@ -486,3 +487,13 @@ def load_and_save_masks_and_captions(
     df = pd.DataFrame(columns=["image_path", "mask_path", "caption"], data=data)
     # save the dataframe to a CSV file
     df.to_csv(os.path.join(output_dir, "captions.csv"), index=False)
+
+
+def _find_files(pattern, dir="."):
+    """Return list of files matching pattern in a given directory.
+
+    Unlike glob, this is case-insensitive.
+    """
+
+    rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+    return [name for name in os.listdir(dir) if rule.match(name)]
