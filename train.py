@@ -72,7 +72,7 @@ def train(
     ),
     lr_scheduler: str = Input(
         description="Learning rate scheduler to use for training",
-        default="linear",
+        default="constant",
         choices=[
             "constant",
             "linear",
