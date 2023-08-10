@@ -9,14 +9,17 @@ from typing import List, Optional
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from diffusers.models.attention_processor import (LoRAAttnProcessor,
-                                                  LoRAAttnProcessor2_0)
+from diffusers.models.attention_processor import LoRAAttnProcessor, LoRAAttnProcessor2_0
 from diffusers.optimization import get_scheduler
 from safetensors.torch import save_file
 from tqdm.auto import tqdm
 
-from dataset_and_utils import (PreprocessedDataset, TokenEmbeddingsHandler,
-                               load_models, unet_attn_processors_state_dict)
+from dataset_and_utils import (
+    PreprocessedDataset,
+    TokenEmbeddingsHandler,
+    load_models,
+    unet_attn_processors_state_dict,
+)
 
 
 def main(

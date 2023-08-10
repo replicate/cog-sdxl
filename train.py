@@ -32,7 +32,7 @@ def train(
     ),
     resolution: int = Input(
         description="Square pixel resolution which your images will be resized to for training",
-        default=512,
+        default=768,
     ),
     train_batch_size: int = Input(
         description="Batch size (per device) for training",
@@ -72,7 +72,7 @@ def train(
     ),
     lr_scheduler: str = Input(
         description="Learning rate scheduler to use for training",
-        default="constant",
+        default="linear",
         choices=[
             "constant",
             "linear",
@@ -92,7 +92,7 @@ def train(
     # ),
     caption_prefix: str = Input(
         description="Text which will be used as prefix during automatic captioning. Must contain the `token_string`. For example, if caption text is 'a photo of TOK', automatic captioning will expand to 'a photo of TOK under a bridge', 'a photo of TOK holding a cup', etc.",
-        default="a photo of TOK",
+        default="a photo of TOK, ",
     ),
     mask_target_prompts: str = Input(
         description="Prompt that describes part of the image that you will find important. For example, if you are fine-tuning your pet, `photo of a dog` will be a good prompt. Prompt-based masking is used to focus the fine-tuning process on the important/salient parts of the image",
@@ -113,7 +113,7 @@ def train(
     verbose: bool = Input(description="verbose output", default=True),
     checkpointing_steps: int = Input(
         description="Number of steps between saving checkpoints. Set to very very high number to disable checkpointing, because you don't need one.",
-        default=200,
+        default=999999,
     ),
 ) -> TrainingOutput:
     # Hard-code token_map for now. Make it configurable once we support multiple concepts or user-uploaded caption csv.
@@ -139,7 +139,7 @@ def train(
         input_zip_path=input_images,
         caption_text=caption_prefix,
         mask_target_prompts=mask_target_prompts,
-        target_size=resolution,
+        target_size=768 * 2,
         crop_based_on_salience=crop_based_on_salience,
         use_face_detection_instead=use_face_detection_instead,
         temp=clipseg_temperature,

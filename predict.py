@@ -9,15 +9,21 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from cog import BasePredictor, Input, Path
-from diffusers import (DDIMScheduler, DiffusionPipeline,
-                       DPMSolverMultistepScheduler,
-                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
-                       HeunDiscreteScheduler, PNDMScheduler,
-                       StableDiffusionXLImg2ImgPipeline,
-                       StableDiffusionXLInpaintPipeline)
+from diffusers import (
+    DDIMScheduler,
+    DiffusionPipeline,
+    DPMSolverMultistepScheduler,
+    EulerAncestralDiscreteScheduler,
+    EulerDiscreteScheduler,
+    HeunDiscreteScheduler,
+    PNDMScheduler,
+    StableDiffusionXLImg2ImgPipeline,
+    StableDiffusionXLInpaintPipeline,
+)
 from diffusers.models.attention_processor import LoRAAttnProcessor2_0
-from diffusers.pipelines.stable_diffusion.safety_checker import \
-    StableDiffusionSafetyChecker
+from diffusers.pipelines.stable_diffusion.safety_checker import (
+    StableDiffusionSafetyChecker,
+)
 from diffusers.utils import load_image
 from safetensors import safe_open
 from safetensors.torch import load_file
@@ -99,6 +105,13 @@ class Predictor(BasePredictor):
 
             unet = pipe.unet
             unet_lora_attn_procs = {}
+            name_rank_map = {}
+            for tk, tv in tensors.items():
+                # up is N, d
+                if tk.endswith("up.weight"):
+                    proc_name = ".".join(tk.split(".")[:-3])
+                    r = tv.shape[1]
+                    name_rank_map[proc_name] = r
 
             for name, attn_processor in unet.attn_processors.items():
                 cross_attention_dim = (
@@ -120,7 +133,7 @@ class Predictor(BasePredictor):
                 module = LoRAAttnProcessor2_0(
                     hidden_size=hidden_size,
                     cross_attention_dim=cross_attention_dim,
-                    rank=32,
+                    rank=name_rank_map[name],
                 )
                 unet_lora_attn_procs[name] = module.to("cuda")
 
@@ -164,7 +177,7 @@ class Predictor(BasePredictor):
             variant="fp16",
         )
         self.is_lora = False
-        if weights:  # or os.path.exists("./trained-model"):
+        if weights or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
 
         self.txt2img_pipe.to("cuda")
@@ -212,7 +225,6 @@ class Predictor(BasePredictor):
             variant="fp16",
         )
         self.refiner.to("cuda")
-
         print("setup took: ", time.time() - start)
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
 
@@ -304,7 +316,10 @@ class Predictor(BasePredictor):
             default=True,
         ),
         lora_scale: float = Input(
-            description="LoRA additive scale. Only applicable on trained models.", ge=0.0, le=1.0, default=0.6
+            description="LoRA additive scale. Only applicable on trained models.",
+            ge=0.0,
+            le=1.0,
+            default=0.6,
         ),
     ) -> List[Path]:
         """Run a single prediction on the model"""

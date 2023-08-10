@@ -20,10 +20,14 @@ import pandas as pd
 import torch
 from PIL import Image, ImageFilter
 from tqdm import tqdm
-from transformers import (BlipForConditionalGeneration, BlipProcessor,
-                          CLIPSegForImageSegmentation, CLIPSegProcessor,
-                          Swin2SRForImageSuperResolution,
-                          Swin2SRImageProcessor)
+from transformers import (
+    BlipForConditionalGeneration,
+    BlipProcessor,
+    CLIPSegForImageSegmentation,
+    CLIPSegProcessor,
+    Swin2SRForImageSuperResolution,
+    Swin2SRImageProcessor,
+)
 
 MODEL_PATH = "./cache"
 TEMP_OUT_DIR = "./temp/"
@@ -95,8 +99,10 @@ def preprocess(
 def swin_ir_sr(
     images: List[Image.Image],
     model_id: Literal[
-        "caidas/swin2SR-classical-sr-x2-64", "caidas/swin2SR-classical-sr-x4-48"
-    ] = "caidas/swin2SR-classical-sr-x2-64",
+        "caidas/swin2SR-classical-sr-x2-64",
+        "caidas/swin2SR-classical-sr-x4-48",
+        "caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr",
+    ] = "caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr",
     target_size: Optional[Tuple[int, int]] = None,
     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
     **kwargs,
@@ -238,7 +244,6 @@ def blip_captioning_dataset(
     return captions
 
 
-
 def face_mask_google_mediapipe(
     images: List[Image.Image], blur_amount: float = 0.0, bias: float = 50.0
 ) -> List[Image.Image]:
@@ -249,10 +254,10 @@ def face_mask_google_mediapipe(
     mp_face_mesh = mp.solutions.face_mesh
 
     face_detection = mp_face_detection.FaceDetection(
-        model_selection=1, min_detection_confidence=0.2
+        model_selection=1, min_detection_confidence=0.1
     )
     face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=True, max_num_faces=1, min_detection_confidence=0.2
+        static_image_mode=True, max_num_faces=1, min_detection_confidence=0.1
     )
 
     masks = []
@@ -277,16 +282,48 @@ def face_mask_google_mediapipe(
                 face_landmarks = face_mesh.process(
                     image_np[bbox[1] : bbox[1] + bbox[3], bbox[0] : bbox[0] + bbox[2]]
                 ).multi_face_landmarks
-                
+
                 # https://github.com/google/mediapipe/issues/1615
                 # This was def helpful
                 indexes = [
-                    10,  338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
-                    397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
-                    172, 58,  132, 93,  234, 127, 162, 21,  54,  103, 67,  109
+                    10,
+                    338,
+                    297,
+                    332,
+                    284,
+                    251,
+                    389,
+                    356,
+                    454,
+                    323,
+                    361,
+                    288,
+                    397,
+                    365,
+                    379,
+                    378,
+                    400,
+                    377,
+                    152,
+                    148,
+                    176,
+                    149,
+                    150,
+                    136,
+                    172,
+                    58,
+                    132,
+                    93,
+                    234,
+                    127,
+                    162,
+                    21,
+                    54,
+                    103,
+                    67,
+                    109,
                 ]
-                
-                
+
                 if face_landmarks:
                     mask = Image.new("L", (iw, ih), 0)
                     mask_np = np.array(mask)
@@ -297,7 +334,9 @@ def face_mask_google_mediapipe(
                             (int(l.x * bbox[2]) + bbox[0], int(l.y * bbox[3]) + bbox[1])
                             for l in face_landmark
                         ]
-                        mask_np = cv2.fillPoly(mask_np, [np.array(landmark_points)], 255)
+                        mask_np = cv2.fillPoly(
+                            mask_np, [np.array(landmark_points)], 255
+                        )
 
                     mask = Image.fromarray(mask_np)
 
@@ -407,7 +446,7 @@ def load_and_save_masks_and_captions(
             files = (
                 _find_files("*.png", files)
                 + _find_files("*.jpg", files)
-                + _find_files("*.jpeg", files),
+                + _find_files("*.jpeg", files)
             )
 
         if len(files) == 0:
@@ -417,7 +456,7 @@ def load_and_save_masks_and_captions(
         if n_length == -1:
             n_length = len(files)
         files = sorted(files)[:n_length]
-
+        print(files)
     images = [Image.open(file).convert("RGB") for file in files]
 
     # captions
@@ -472,11 +511,11 @@ def load_and_save_masks_and_captions(
 
     # iterate through the images, masks, and captions and add a row to the dataframe for each
     for idx, (image, mask, caption) in enumerate(zip(images, seg_masks, captions)):
-        image_name = f"{idx}.src.jpg"
+        image_name = f"{idx}.src.png"
         mask_file = f"{idx}.mask.png"
 
         # save the image and mask files
-        image.save(output_dir + image_name, quality=99)
+        image.save(output_dir + image_name)
         mask.save(output_dir + mask_file)
 
         # add a new row to the dataframe with the file names and caption
@@ -490,10 +529,9 @@ def load_and_save_masks_and_captions(
 
 
 def _find_files(pattern, dir="."):
-    """Return list of files matching pattern in a given directory.
-
+    """Return list of files matching pattern in a given directory, in absolute format.
     Unlike glob, this is case-insensitive.
     """
 
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
-    return [name for name in os.listdir(dir) if rule.match(name)]
+    return [os.path.join(dir, f) for f in os.listdir(dir) if rule.match(f)]
