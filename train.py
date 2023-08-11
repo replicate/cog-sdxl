@@ -139,7 +139,7 @@ def train(
         input_zip_path=input_images,
         caption_text=caption_prefix,
         mask_target_prompts=mask_target_prompts,
-        target_size=768 * 2,
+        target_size=resolution,
         crop_based_on_salience=crop_based_on_salience,
         use_face_detection_instead=use_face_detection_instead,
         temp=clipseg_temperature,
