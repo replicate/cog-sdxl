@@ -271,11 +271,11 @@ def face_mask_google_mediapipe(
 
         # Perform face detection
         results_detection = face_detection.process(image_np)
-
+        ih, iw, _ = image_np.shape
         if results_detection.detections:
             for detection in results_detection.detections:
                 bboxC = detection.location_data.relative_bounding_box
-                ih, iw, _ = image_np.shape
+                
                 bbox = (
                     int(bboxC.xmin * iw),
                     int(bboxC.ymin * ih),
