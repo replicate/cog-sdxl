@@ -99,6 +99,7 @@ def preprocess(
 
 
 @torch.no_grad()
+@torch.cuda.amp.autocast()
 def swin_ir_sr(
     images: List[Image.Image],
     model_id: Literal[
@@ -148,6 +149,7 @@ def swin_ir_sr(
 
 
 @torch.no_grad()
+@torch.cuda.amp.autocast()
 def clipseg_mask_generator(
     images: List[Image.Image],
     target_prompts: Union[List[str], str],
@@ -363,8 +365,9 @@ def face_mask_google_mediapipe(
                     masks.append(Image.new("L", (iw, ih), 0))
 
         else:
-            # If no face is detected, add a black mask of the same size as the image
-            masks.append(Image.new("L", (iw, ih), 0))
+            print("No face detected, adding full mask")
+            # If no face is detected, add a white mask of the same size as the image
+            masks.append(Image.new("L", (iw, ih), 255))
 
     return masks
 

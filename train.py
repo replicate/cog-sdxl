@@ -115,9 +115,9 @@ def train(
         default=999999,
     ),
     input_images_filetype: str = Input(
-        description="Filetype of the input images. Can be either `zip` or `tar`. By default its None, and it will be inferred from the ext of input file.",
-        default=None,
-        choices=["zip", "tar", None],
+        description="Filetype of the input images. Can be either `zip` or `tar`. By default its `infer`, and it will be inferred from the ext of input file.",
+        default="infer",
+        choices=["zip", "tar", "infer"],
     ),
 ) -> TrainingOutput:
     # Hard-code token_map for now. Make it configurable once we support multiple concepts or user-uploaded caption csv.
