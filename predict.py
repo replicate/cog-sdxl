@@ -338,6 +338,8 @@ class Predictor(BasePredictor):
             sdxl_kwargs["image"] = self.load_image(image)
             sdxl_kwargs["mask_image"] = self.load_image(mask)
             sdxl_kwargs["strength"] = prompt_strength
+            sdxl_kwargs["width"] = width
+            sdxl_kwargs["height"] = height
             pipe = self.inpaint_pipe
         elif image:
             print("img2img mode")
