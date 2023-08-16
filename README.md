@@ -29,6 +29,7 @@ cog run -p 5000 python -m cog.server.http
 **2023-08-17**
 * ROI problem is fixed.
 * Now BLIP caption_prefix does not interfere with BLIP captioner.
+* Now lora_url can be used to accept lora models from the web.
 
 
 **2023-08-12**
