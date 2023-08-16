@@ -230,7 +230,7 @@ def blip_captioning_dataset(
     captions = []
     print(f"Input captioning text: {text}")
     for image in tqdm(images):
-        inputs = processor(image, text=text, return_tensors="pt").to("cuda")
+        inputs = processor(image, text=text, return_tensors="pt").to(device)
         out = model.generate(
             **inputs, max_length=150, do_sample=True, top_k=50, temperature=0.7
         )
