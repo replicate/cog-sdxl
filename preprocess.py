@@ -275,13 +275,23 @@ def face_mask_google_mediapipe(
         if results_detection.detections:
             for detection in results_detection.detections:
                 bboxC = detection.location_data.relative_bounding_box
-                
+
                 bbox = (
                     int(bboxC.xmin * iw),
                     int(bboxC.ymin * ih),
                     int(bboxC.width * iw),
                     int(bboxC.height * ih),
                 )
+
+                # make sure bbox is within image
+                bbox = (
+                    max(0, bbox[0]),
+                    max(0, bbox[1]),
+                    min(iw - bbox[0], bbox[2]),
+                    min(ih - bbox[1], bbox[3]),
+                )
+
+                print(bbox)
 
                 # Extract face landmarks
                 face_landmarks = face_mesh.process(
@@ -362,7 +372,7 @@ def face_mask_google_mediapipe(
                     masks.append(mask)
                 else:
                     # If face landmarks are not available, add a black mask of the same size as the image
-                    masks.append(Image.new("L", (iw, ih), 0))
+                    masks.append(Image.new("L", (iw, ih), 255))
 
         else:
             print("No face detected, adding full mask")
