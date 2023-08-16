@@ -20,10 +20,15 @@ cog predict -i prompt="a photo of TOK"
 cog train -i input_images=@example_datasets/__data.zip -i use_face_detection_instead=True
 ```
 
+```bash
+cog run -p 5000 python -m cog.server.http
+```
+
 ## Update notes
 
 **2023-08-17**
 * ROI problem is fixed.
+* Now BLIP caption_prefix does not interfere with BLIP captioner.
 
 
 **2023-08-12**
