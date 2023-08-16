@@ -68,7 +68,10 @@ def download_weights(url, dest):
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
-        local_weights_cache = "./trained-model"
+        local_weights_cache = f"./trained-model"
+
+        shutil.rmtree(local_weights_cache, ignore_errors=True)
+
         if not os.path.exists(local_weights_cache):
             # pget -x doesn't like replicate.delivery
             weights = str(weights)
@@ -150,11 +153,11 @@ class Predictor(BasePredictor):
         with open(os.path.join(local_weights_cache, "special_params.json"), "r") as f:
             params = json.load(f)
         self.token_map = params
-
         self.tuned_model = True
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
+        print(weights)
         start = time.time()
         self.tuned_model = False
 
@@ -177,7 +180,7 @@ class Predictor(BasePredictor):
             variant="fp16",
         )
         self.is_lora = False
-        if weights or os.path.exists("./trained-model"):
+        if weights:
             self.load_trained_weights(weights, self.txt2img_pipe)
 
         self.txt2img_pipe.to("cuda")
@@ -242,6 +245,18 @@ class Predictor(BasePredictor):
             clip_input=safety_checker_input.pixel_values.to(torch.float16),
         )
         return image, has_nsfw_concept
+
+    def remove_lora(self):
+        # remove lora of txt2img_pipe.unet
+        self.txt2img_pipe = DiffusionPipeline.from_pretrained(
+            SDXL_MODEL_CACHE,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+            variant="fp16",
+        ).to("cuda")
+        self.is_lora = False
+        self.token_map = {}
+        self.tuned_model = False
 
     @torch.inference_mode()
     def predict(
@@ -321,18 +336,31 @@ class Predictor(BasePredictor):
             le=1.0,
             default=0.6,
         ),
+        lora_url: str = Input(
+            description="LoRA URLs. Can be tar or safetensor format.",
+            default=None,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model"""
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
+        start = time.time()
+        print(lora_url)
+        if lora_url is not None:
+            self.load_trained_weights(lora_url, self.txt2img_pipe)
+        else:
+            self.remove_lora()  # TODO : optimize this
 
+        print(f"Time took to Load / remove LoRA: {time.time() - start}")
         sdxl_kwargs = {}
         if self.tuned_model:
             # consistency with fine-tuning API
             for k, v in self.token_map.items():
                 prompt = prompt.replace(k, v)
+
         print(f"Prompt: {prompt}")
+
         if image and mask:
             print("inpainting mode")
             sdxl_kwargs["image"] = self.load_image(image)
