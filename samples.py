@@ -48,16 +48,96 @@ def main():
         "PNDM",
     ]
 
+    # gen(
+    #     f"sample.txt2img.png",
+    #     prompt="A studio portrait photo of a cat",
+    #     num_inference_steps=25,
+    #     guidance_scale=7,
+    #     negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
+    #     seed=1000,
+    #     width=1024,
+    #     height=1024,
+    # )
+
+    lora1 = "https://pbxt.replicate.delivery/5JPqMFc9u2qfbiDX4wjrAxhYyq7bIS5ehHzBWpi9vzY9JfviA/trained_model.tar"
+    lora2 = "https://pbxt.replicate.delivery/EiSLCzkuLeR6HSQyzdDDR7PimKzIdQez59GuqAkzPY9ReqyiA/trained_model.tar"
+
     gen(
-        f"sample.txt2img.png",
-        prompt="A studio portrait photo of a cat",
+        f"sample.nolora0.png",
+        prompt="A studio portrait photo of a TOK",
         num_inference_steps=25,
         guidance_scale=7,
         negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
         seed=1000,
         width=1024,
         height=1024,
+        lora_url=None,
     )
+
+    gen(
+        f"sample.nolora1.png",
+        prompt="A studio portrait photo of a TOK",
+        num_inference_steps=25,
+        guidance_scale=7,
+        negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
+        seed=1000,
+        width=1024,
+        height=1024,
+        lora_url=None,
+    )
+
+    gen(
+        f"sample.lora1.png",
+        prompt="A studio portrait photo of a TOK",
+        num_inference_steps=25,
+        guidance_scale=7,
+        negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
+        seed=1000,
+        width=1024,
+        height=1024,
+        lora_url=lora1,
+    )
+
+    gen(
+        f"sample.lora2.png",
+        prompt="A studio portrait photo of a TOK",
+        num_inference_steps=25,
+        guidance_scale=7,
+        negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
+        seed=1000,
+        width=1024,
+        height=1024,
+        lora_url=lora2,
+    )
+
+    gen(
+        f"sample.nolora2.png",
+        prompt="A studio portrait photo of a TOK",
+        num_inference_steps=25,
+        guidance_scale=7,
+        negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
+        seed=1000,
+        width=1024,
+        height=1024,
+        lora_url=None,
+    )
+
+    gen(
+        f"sample.lora3.png",
+        prompt="A studio portrait photo of a TOK",
+        num_inference_steps=25,
+        guidance_scale=7,
+        negative_prompt="ugly, soft, blurry, out of focus, low quality, garish, distorted, disfigured",
+        seed=1000,
+        width=1024,
+        height=1024,
+        lora_url=lora1,
+    )
+
+    # all nolora should be the same
+    # lora1 = lora3 = barbie, lora1 != lora2
+
+    return
 
     for refiner in ["base_image_refiner", "expert_ensemble_refiner", "no_refiner"]:
         gen(
@@ -111,6 +191,7 @@ def main():
         width=1024,
         height=1024,
     )
+
     gen(
         f"sample.refine.10.txt2img.png",
         prompt="A studio portrait photo of a cat",
