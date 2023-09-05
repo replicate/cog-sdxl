@@ -68,6 +68,11 @@ def download_weights(url, dest):
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
+        if self.tuned_weights == weights:
+            return
+
+        self.tuned_weights = weights
+
         local_weights_cache = "./trained-model"
         if not os.path.exists(local_weights_cache):
             # pget -x doesn't like replicate.delivery
@@ -157,6 +162,7 @@ class Predictor(BasePredictor):
         """Load the model into memory to make running multiple predictions efficient"""
         start = time.time()
         self.tuned_model = False
+        self.tuned_weights = None
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
@@ -321,11 +327,18 @@ class Predictor(BasePredictor):
             le=1.0,
             default=0.6,
         ),
+        replicate_weights: str = Input(
+            description="Replicate LoRA weights to use. Leave blank to use the default weights.",
+            default=None,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model"""
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
+
+        if replicate_weights:
+            self.load_trained_weights(replicate_weights, self.txt2img_pipe)
 
         sdxl_kwargs = {}
         if self.tuned_model:
