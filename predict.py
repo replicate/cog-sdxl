@@ -62,12 +62,28 @@ def download_weights(url, dest):
     start = time.time()
     print("downloading url: ", url)
     print("downloading to: ", dest)
-    subprocess.check_call(["pget", "-x", url, dest])
+    subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
     print("downloading took: ", time.time() - start)
 
 
 class Predictor(BasePredictor):
+    # @functools.lru_cache(maxsize=3)
+    # def get_lora_unet_params(self, weights: str) -> dict:
+    #     local_weights_cache = "./trained-model"
+    #     if not os.path.exists(local_weights_cache):
+    #         # pget -x doesn't like replicate.delivery
+    #         weights = str(weights)
+    #         weights = weights.replace(
+    #             "replicate.delivery/pbxt", "replicate-files.object.lga1.coreweave.com"
+    #         )
+    #         download_weights(weights, local_weights_cache)
+    #     new_unet_params = load_file(
+    #         os.path.join(local_weights_cache, "unet.safetensors")
+    #     )
+
     def load_trained_weights(self, weights, pipe):
+        from no_init import no_init_or_tensor
+
         if self.tuned_weights == weights:
             return
 
@@ -78,7 +94,7 @@ class Predictor(BasePredictor):
             # pget -x doesn't like replicate.delivery
             weights = str(weights)
             weights = weights.replace(
-                "replicate.delivery/pbxt", "storage.googleapis.com/replicate-files"
+                "replicate.delivery/pbxt", "replicate-files.object.lga1.coreweave.com"
             )
             download_weights(weights, local_weights_cache)
 
@@ -97,9 +113,8 @@ class Predictor(BasePredictor):
             new_unet_params = load_file(
                 os.path.join(local_weights_cache, "unet.safetensors")
             )
-            sd = pipe.unet.state_dict()
-            sd.update(new_unet_params)
-            pipe.unet.load_state_dict(sd)
+            # this should return _IncompatibleKeys(missing_keys=[...], unexpected_keys=[])
+            pipe.unet.load_state_dict(new_unet_params, strict=False)
 
         else:
             print("Loading Unet LoRA")
@@ -108,7 +123,6 @@ class Predictor(BasePredictor):
 
             tensors = load_file(os.path.join(local_weights_cache, "lora.safetensors"))
 
-            unet = pipe.unet
             unet_lora_attn_procs = {}
             name_rank_map = {}
             for tk, tv in tensors.items():
@@ -134,13 +148,13 @@ class Predictor(BasePredictor):
                 elif name.startswith("down_blocks"):
                     block_id = int(name[len("down_blocks.")])
                     hidden_size = unet.config.block_out_channels[block_id]
-
-                module = LoRAAttnProcessor2_0(
-                    hidden_size=hidden_size,
-                    cross_attention_dim=cross_attention_dim,
-                    rank=name_rank_map[name],
-                )
-                unet_lora_attn_procs[name] = module.to("cuda")
+                with no_init_or_tensor():
+                    module = LoRAAttnProcessor2_0(
+                        hidden_size=hidden_size,
+                        cross_attention_dim=cross_attention_dim,
+                        rank=name_rank_map[name],
+                    )
+                unet_lora_attn_procs[name] = module.to("cuda", non_blocking=True)
 
             unet.set_attn_processor(unet_lora_attn_procs)
             unet.load_state_dict(tensors, strict=False)
