@@ -1,10 +1,11 @@
+import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from weights import WeightsDownloadCache
 
 import numpy as np
 import torch
@@ -57,7 +58,6 @@ SCHEDULERS = {
     "PNDM": PNDMScheduler,
 }
 
-
 def download_weights(url, dest):
     start = time.time()
     print("downloading url: ", url)
@@ -67,36 +67,16 @@ def download_weights(url, dest):
 
 
 class Predictor(BasePredictor):
-    # @functools.lru_cache(maxsize=3)
-    # def get_lora_unet_params(self, weights: str) -> dict:
-    #     local_weights_cache = "./trained-model"
-    #     if not os.path.exists(local_weights_cache):
-    #         # pget -x doesn't like replicate.delivery
-    #         weights = str(weights)
-    #         weights = weights.replace(
-    #             "replicate.delivery/pbxt", "replicate-files.object.lga1.coreweave.com"
-    #         )
-    #         download_weights(weights, local_weights_cache)
-    #     new_unet_params = load_file(
-    #         os.path.join(local_weights_cache, "unet.safetensors")
-    #     )
-
     def load_trained_weights(self, weights, pipe):
         from no_init import no_init_or_tensor
 
         if self.tuned_weights == weights:
+            print("skipping loading .. weights already loaded")
             return
 
         self.tuned_weights = weights
 
-        local_weights_cache = "./trained-model"
-        if not os.path.exists(local_weights_cache):
-            # pget -x doesn't like replicate.delivery
-            weights = str(weights)
-            weights = weights.replace(
-                "replicate.delivery/pbxt", "replicate-files.object.lga1.coreweave.com"
-            )
-            download_weights(weights, local_weights_cache)
+        local_weights_cache = self.weights_cache.ensure(weights)
 
         # load UNET
         print("Loading fine-tuned model")
@@ -174,9 +154,12 @@ class Predictor(BasePredictor):
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
+
         start = time.time()
         self.tuned_model = False
         self.tuned_weights = None
+
+        self.weights_cache = WeightsDownloadCache()
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
