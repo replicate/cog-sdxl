@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from weights import WeightsDownloadCache
 
 import numpy as np
 import torch
@@ -57,7 +58,6 @@ SCHEDULERS = {
     "PNDM": PNDMScheduler,
 }
 
-
 def download_weights(url, dest):
     start = time.time()
     print("downloading url: ", url)
@@ -74,16 +74,7 @@ class Predictor(BasePredictor):
 
         self.tuned_weights = weights
 
-        hashed_url = hashlib.md5(weights.encode()).hexdigest()
-
-        local_weights_cache = f"./trained-model-{hashed_url}"
-        if not os.path.exists(local_weights_cache):
-            # pget -x doesn't like replicate.delivery
-            weights = str(weights)
-            weights = weights.replace(
-                "replicate.delivery/pbxt", "storage.googleapis.com/replicate-files"
-            )
-            download_weights(weights, local_weights_cache)
+        local_weights_cache = self.weights_cache.ensure(weights)
 
         # load UNET
         print("Loading fine-tuned model")
@@ -163,9 +154,12 @@ class Predictor(BasePredictor):
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
+
         start = time.time()
         self.tuned_model = False
         self.tuned_weights = None
+
+        self.weights_cache = WeightsDownloadCache()
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
