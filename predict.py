@@ -1,6 +1,6 @@
+import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import time
@@ -69,11 +69,14 @@ def download_weights(url, dest):
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
         if self.tuned_weights == weights:
+            print("skipping loading .. weights already loaded")
             return
 
         self.tuned_weights = weights
 
-        local_weights_cache = "./trained-model"
+        hashed_url = hashlib.md5(weights.encode()).hexdigest()
+
+        local_weights_cache = f"./trained-model-{hashed_url}"
         if not os.path.exists(local_weights_cache):
             # pget -x doesn't like replicate.delivery
             weights = str(weights)
