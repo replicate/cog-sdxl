@@ -1,5 +1,7 @@
 # Prediction interface for Cog ⚙️
 # https://github.com/replicate/cog/blob/main/docs/python.md
+import pathlib
+REAL = not pathlib.Path("/.dockerenv").exists()
 
 from cog import BasePredictor, Input, Path, File
 import hippo_sd
@@ -7,12 +9,14 @@ import torch
 import tempfile
 
 # set device to cuda seems save gpu memory
-torch.cuda.current_device()
+if REAL:
+    torch.cuda.current_device()
 from hippo_sd.pipeline_stable_diffusion_xl import replace_pipeline
 from hippo_sd.pipeline_stable_diffusion_xl_img2img import replace_img2img_pipeline
 
-replace_pipeline()
-replace_img2img_pipeline()
+if REAL:
+    replace_pipeline()
+    replace_img2img_pipeline()
 
 from diffusers import (
     EulerDiscreteScheduler,
