@@ -26,6 +26,7 @@ build:
     - unzip /HippoSD_A40.zip
     - pip3 install /HippoSD_A40/hippo_sd-0.1-py3-none-any.whl
     - python3 /HippoSD_A40/download_pipeline.py
+    - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.1/pget" && chmod +x /usr/local/bin/pget
 
 
 # predict.py defines how predictions are run on your model
