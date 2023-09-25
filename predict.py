@@ -68,6 +68,8 @@ def download_weights(url, dest):
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
+        # weights can be a URLPath, which behaves in unexpected ways
+        weights = str(weights)
         if self.tuned_weights == weights:
             print("skipping loading .. weights already loaded")
             return
