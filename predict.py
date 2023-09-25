@@ -1,10 +1,11 @@
+import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from weights import WeightsDownloadCache
 
 import numpy as np
 import torch
@@ -57,7 +58,6 @@ SCHEDULERS = {
     "PNDM": PNDMScheduler,
 }
 
-
 def download_weights(url, dest):
     start = time.time()
     print("downloading url: ", url)
@@ -68,14 +68,13 @@ def download_weights(url, dest):
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
-        local_weights_cache = "./trained-model"
-        if not os.path.exists(local_weights_cache):
-            # pget -x doesn't like replicate.delivery
-            weights = str(weights)
-            weights = weights.replace(
-                "replicate.delivery/pbxt", "storage.googleapis.com/replicate-files"
-            )
-            download_weights(weights, local_weights_cache)
+        if self.tuned_weights == weights:
+            print("skipping loading .. weights already loaded")
+            return
+
+        self.tuned_weights = weights
+
+        local_weights_cache = self.weights_cache.ensure(weights)
 
         # load UNET
         print("Loading fine-tuned model")
@@ -155,8 +154,12 @@ class Predictor(BasePredictor):
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
+
         start = time.time()
         self.tuned_model = False
+        self.tuned_weights = None
+
+        self.weights_cache = WeightsDownloadCache()
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
@@ -321,11 +324,18 @@ class Predictor(BasePredictor):
             le=1.0,
             default=0.6,
         ),
+        replicate_weights: str = Input(
+            description="Replicate LoRA weights to use. Leave blank to use the default weights.",
+            default=None,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model"""
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
+
+        if replicate_weights:
+            self.load_trained_weights(replicate_weights, self.txt2img_pipe)
 
         sdxl_kwargs = {}
         if self.tuned_model:
