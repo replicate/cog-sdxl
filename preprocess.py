@@ -54,6 +54,8 @@ def preprocess(
             shutil.rmtree(path)
         os.makedirs(path)
 
+    caption_csv = None
+
     if input_images_filetype == "zip" or str(input_zip_path).endswith(".zip"):
         with ZipFile(str(input_zip_path), "r") as zip_ref:
             for zip_info in zip_ref.infolist():
@@ -65,6 +67,10 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, TEMP_IN_DIR)
+                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in zip_info.filename:
+                    zip_info.filename = os.path.basename(zip_info.filename)
+                    zip_ref.extract(zip_info, TEMP_IN_DIR)
+                    caption_csv = zip_info.filename
     elif input_images_filetype == "tar" or str(input_zip_path).endswith(".tar"):
         assert str(input_zip_path).endswith(
             ".tar"
@@ -78,6 +84,10 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     tar_info.name = os.path.basename(tar_info.name)
                     tar_ref.extract(tar_info, TEMP_IN_DIR)
+                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in zip_info.filename:
+                    zip_info.filename = os.path.basename(zip_info.filename)
+                    zip_ref.extract(zip_info, TEMP_IN_DIR)
+                    caption_csv = zip_info.filename
     else:
         assert False, "input_images_filetype must be zip or tar"
 
@@ -87,6 +97,7 @@ def preprocess(
         files=TEMP_IN_DIR,
         output_dir=output_dir,
         caption_text=caption_text,
+        caption_csv=caption_csv,
         mask_target_prompts=mask_target_prompts,
         target_size=target_size,
         crop_based_on_salience=crop_based_on_salience,
@@ -428,6 +439,7 @@ def load_and_save_masks_and_captions(
     files: Union[str, List[str]],
     output_dir: str = TEMP_OUT_DIR,
     caption_text: Optional[str] = None,
+    caption_csv: Optional[str] = None,
     mask_target_prompts: Optional[Union[List[str], str]] = None,
     target_size: int = 1024,
     crop_based_on_salience: bool = True,
@@ -477,10 +489,24 @@ def load_and_save_masks_and_captions(
     images = [Image.open(file).convert("RGB") for file in files]
 
     # captions
-    print(f"Generating {len(images)} captions...")
-    captions = blip_captioning_dataset(
-        images, text=caption_text, substitution_tokens=substitution_tokens
-    )
+    if caption_csv:
+        print(f"Using provided captions")
+        caption_df = pd.read_csv(caption_csv)
+        # sort images to be consistent with 'sorted' above
+        caption_df = caption_df.sort_values('image_file')
+        captions = caption_df['captions'].values
+        if len(captions) != len(images):
+            print("Not the same number of captions as images!")
+            print(f"Num captions: {len(captions)}, Num images: {len(images)}")
+            print("Captions: ", captions)
+            print("Images: ", files)
+            raise Exception("Not the same number of captions as images! Check that all files passed in have a caption in captions.csv, and vice versa")
+                
+    else:
+        print(f"Generating {len(images)} captions...")
+        captions = blip_captioning_dataset(
+            images, text=caption_text, substitution_tokens=substitution_tokens
+        )
 
     if mask_target_prompts is None:
         mask_target_prompts = ""
