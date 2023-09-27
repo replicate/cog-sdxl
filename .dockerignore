@@ -27,3 +27,9 @@ weights
 inference_*
 trained-model
 *.zip
+tmp/
+blip-cache/
+clipseg-cache/
+swin2sr-cache/
+weights-cache/
+tests/
