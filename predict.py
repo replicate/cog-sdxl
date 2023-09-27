@@ -160,6 +160,8 @@ class Predictor(BasePredictor):
         start = time.time()
         self.tuned_model = False
         self.tuned_weights = None
+        if str(weights) == 'weights':
+            weights = None
 
         self.weights_cache = WeightsDownloadCache()
 

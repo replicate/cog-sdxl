@@ -29,7 +29,24 @@ from transformers import (
     Swin2SRImageProcessor,
 )
 
-MODEL_PATH = "./cache"
+from predict import download_weights
+
+# model is fixed to Salesforce/blip-image-captioning-large
+BLIP_URL = "https://weights.replicate.delivery/default/blip_large/blip_large.tar"
+BLIP_PROCESSOR_URL = "https://weights.replicate.delivery/default/blip_processor/blip_processor.tar"
+BLIP_PATH = "./blip-cache"
+BLIP_PROCESSOR_PATH = "./blip-proc-cache"
+
+# model is fixed to CIDAS/clipseg-rd64-refined
+CLIPSEG_URL = "https://weights.replicate.delivery/default/clip_seg_rd64_refined/clip_seg_rd64_refined.tar"
+CLIPSEG_PROCESSOR = "https://weights.replicate.delivery/default/clip_seg_processor/clip_seg_processor.tar"
+CLIPSEG_PATH = "./clipseg-cache"
+CLIPSEG_PROCESSOR_PATH = "./clipseg-proc-cache"
+
+# model is fixed to caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr
+SWIN2SR_URL = "https://weights.replicate.delivery/default/swin2sr_realworld_sr_x4_64_bsrgan_psnr/swin2sr_realworld_sr_x4_64_bsrgan_psnr.tar"
+SWIN2SR_PATH = "./swin2sr-cache"
+
 TEMP_OUT_DIR = "./temp/"
 TEMP_IN_DIR = "./temp_in/"
 
@@ -113,11 +130,6 @@ def preprocess(
 @torch.cuda.amp.autocast()
 def swin_ir_sr(
     images: List[Image.Image],
-    model_id: Literal[
-        "caidas/swin2SR-classical-sr-x2-64",
-        "caidas/swin2SR-classical-sr-x4-48",
-        "caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr",
-    ] = "caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr",
     target_size: Optional[Tuple[int, int]] = None,
     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
     **kwargs,
@@ -128,9 +140,10 @@ def swin_ir_sr(
     and will be returned as is.
 
     """
-
+    if not os.path.exists(SWIN2SR_PATH):
+        download_weights(SWIN2SR_URL, SWIN2SR_PATH)
     model = Swin2SRForImageSuperResolution.from_pretrained(
-        model_id, cache_dir=MODEL_PATH
+        SWIN2SR_PATH
     ).to(device)
     processor = Swin2SRImageProcessor()
 
@@ -164,9 +177,6 @@ def swin_ir_sr(
 def clipseg_mask_generator(
     images: List[Image.Image],
     target_prompts: Union[List[str], str],
-    model_id: Literal[
-        "CIDAS/clipseg-rd64-refined", "CIDAS/clipseg-rd16"
-    ] = "CIDAS/clipseg-rd64-refined",
     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
     bias: float = 0.01,
     temp: float = 1.0,
@@ -182,11 +192,12 @@ def clipseg_mask_generator(
         )
 
         target_prompts = [target_prompts] * len(images)
-
-    processor = CLIPSegProcessor.from_pretrained(model_id, cache_dir=MODEL_PATH)
-    model = CLIPSegForImageSegmentation.from_pretrained(
-        model_id, cache_dir=MODEL_PATH
-    ).to(device)
+    if not os.path.exists(CLIPSEG_PROCESSOR_PATH):
+        download_weights(CLIPSEG_PROCESSOR, CLIPSEG_PROCESSOR_PATH)
+    if not os.path.exists(CLIPSEG_PATH):
+        download_weights(CLIPSEG_URL, CLIPSEG_PATH)
+    processor = CLIPSegProcessor.from_pretrained(CLIPSEG_PROCESSOR_PATH)
+    model = CLIPSegForImageSegmentation.from_pretrained(CLIPSEG_PATH).to(device)
 
     masks = []
 
@@ -223,10 +234,6 @@ def clipseg_mask_generator(
 def blip_captioning_dataset(
     images: List[Image.Image],
     text: Optional[str] = None,
-    model_id: Literal[
-        "Salesforce/blip-image-captioning-large",
-        "Salesforce/blip-image-captioning-base",
-    ] = "Salesforce/blip-image-captioning-large",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     substitution_tokens: Optional[List[str]] = None,
     **kwargs,
@@ -234,10 +241,12 @@ def blip_captioning_dataset(
     """
     Returns a list of captions for the given images
     """
-    processor = BlipProcessor.from_pretrained(model_id, cache_dir=MODEL_PATH)
-    model = BlipForConditionalGeneration.from_pretrained(
-        model_id, cache_dir=MODEL_PATH
-    ).to(device)
+    if not os.path.exists(BLIP_PROCESSOR_PATH):
+        download_weights(BLIP_PROCESSOR_URL, BLIP_PROCESSOR_PATH)
+    if not os.path.exists(BLIP_PATH):
+        download_weights(BLIP_URL, BLIP_PATH)
+    processor = BlipProcessor.from_pretrained(BLIP_PROCESSOR_PATH)
+    model = BlipForConditionalGeneration.from_pretrained(BLIP_PATH).to(device)
     captions = []
     text = text.strip()
     print(f"Input captioning text: {text}")
