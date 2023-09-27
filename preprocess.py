@@ -70,7 +70,7 @@ def preprocess(
                 if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in zip_info.filename:
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, TEMP_IN_DIR)
-                    caption_csv = zip_info.filename
+                    caption_csv = os.path.join(TEMP_IN_DIR, zip_info.filename)
     elif input_images_filetype == "tar" or str(input_zip_path).endswith(".tar"):
         assert str(input_zip_path).endswith(
             ".tar"
@@ -84,10 +84,10 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     tar_info.name = os.path.basename(tar_info.name)
                     tar_ref.extract(tar_info, TEMP_IN_DIR)
-                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in zip_info.filename:
-                    zip_info.filename = os.path.basename(zip_info.filename)
-                    zip_ref.extract(zip_info, TEMP_IN_DIR)
-                    caption_csv = zip_info.filename
+                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in tar_info.name:
+                    tar_info.name = os.path.basename(tar_info.name)
+                    tar_ref.extract(tar_info, TEMP_IN_DIR)
+                    caption_csv = os.path.join(TEMP_IN_DIR, tar_info.name)
     else:
         assert False, "input_images_filetype must be zip or tar"
 
@@ -485,7 +485,7 @@ def load_and_save_masks_and_captions(
         if n_length == -1:
             n_length = len(files)
         files = sorted(files)[:n_length]
-        print(files)
+        print("Image files: ", files)
     images = [Image.open(file).convert("RGB") for file in files]
 
     # captions
@@ -494,7 +494,8 @@ def load_and_save_masks_and_captions(
         caption_df = pd.read_csv(caption_csv)
         # sort images to be consistent with 'sorted' above
         caption_df = caption_df.sort_values('image_file')
-        captions = caption_df['captions'].values
+        captions = caption_df['caption'].values
+        print("Captions: ", captions)
         if len(captions) != len(images):
             print("Not the same number of captions as images!")
             print(f"Num captions: {len(captions)}, Num images: {len(images)}")
