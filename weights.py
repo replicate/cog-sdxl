@@ -7,7 +7,9 @@ import time
 
 
 class WeightsDownloadCache:
-    def __init__(self, min_disk_free: int = 10 * (2**30), base_dir: str = "/src/weights-cache"):
+    def __init__(
+        self, min_disk_free: int = 10 * (2**30), base_dir: str = "/src/weights-cache"
+    ):
         """
         WeightsDownloadCache is meant to track and download weights files as fast
         as possible, while ensuring there's enough disk space.
@@ -113,8 +115,12 @@ class WeightsDownloadCache:
         print(f"Downloading weights: {url}")
 
         st = time.time()
+        # maybe retry with the real url if this doesn't work
+        url = url.replace(
+            "replicate.delivery/pbxt", "replicate-files.object.lga1.coreweave.com"
+        )
         try:
-            output = subprocess.check_output(["pget", "-x", url, dest])
+            output = subprocess.check_output(["pget", "-x", url, dest], close_fds=True)
             print(output)
         except subprocess.CalledProcessError as e:
             # If download fails, clean up and re-raise exception
