@@ -29,7 +29,24 @@ from transformers import (
     Swin2SRImageProcessor,
 )
 
-MODEL_PATH = "./cache"
+from predict import download_weights
+
+# model is fixed to Salesforce/blip-image-captioning-large
+BLIP_URL = "https://weights.replicate.delivery/default/blip_large/blip_large.tar"
+BLIP_PROCESSOR_URL = "https://weights.replicate.delivery/default/blip_processor/blip_processor.tar"
+BLIP_PATH = "./blip-cache"
+BLIP_PROCESSOR_PATH = "./blip-proc-cache"
+
+# model is fixed to CIDAS/clipseg-rd64-refined
+CLIPSEG_URL = "https://weights.replicate.delivery/default/clip_seg_rd64_refined/clip_seg_rd64_refined.tar"
+CLIPSEG_PROCESSOR = "https://weights.replicate.delivery/default/clip_seg_processor/clip_seg_processor.tar"
+CLIPSEG_PATH = "./clipseg-cache"
+CLIPSEG_PROCESSOR_PATH = "./clipseg-proc-cache"
+
+# model is fixed to caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr
+SWIN2SR_URL = "https://weights.replicate.delivery/default/swin2sr_realworld_sr_x4_64_bsrgan_psnr/swin2sr_realworld_sr_x4_64_bsrgan_psnr.tar"
+SWIN2SR_PATH = "./swin2sr-cache"
+
 TEMP_OUT_DIR = "./temp/"
 TEMP_IN_DIR = "./temp_in/"
 
@@ -54,6 +71,8 @@ def preprocess(
             shutil.rmtree(path)
         os.makedirs(path)
 
+    caption_csv = None
+
     if input_images_filetype == "zip" or str(input_zip_path).endswith(".zip"):
         with ZipFile(str(input_zip_path), "r") as zip_ref:
             for zip_info in zip_ref.infolist():
@@ -65,6 +84,10 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, TEMP_IN_DIR)
+                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in zip_info.filename:
+                    zip_info.filename = os.path.basename(zip_info.filename)
+                    zip_ref.extract(zip_info, TEMP_IN_DIR)
+                    caption_csv = os.path.join(TEMP_IN_DIR, zip_info.filename)
     elif input_images_filetype == "tar" or str(input_zip_path).endswith(".tar"):
         assert str(input_zip_path).endswith(
             ".tar"
@@ -78,6 +101,10 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     tar_info.name = os.path.basename(tar_info.name)
                     tar_ref.extract(tar_info, TEMP_IN_DIR)
+                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in tar_info.name:
+                    tar_info.name = os.path.basename(tar_info.name)
+                    tar_ref.extract(tar_info, TEMP_IN_DIR)
+                    caption_csv = os.path.join(TEMP_IN_DIR, tar_info.name)
     else:
         assert False, "input_images_filetype must be zip or tar"
 
@@ -87,6 +114,7 @@ def preprocess(
         files=TEMP_IN_DIR,
         output_dir=output_dir,
         caption_text=caption_text,
+        caption_csv=caption_csv,
         mask_target_prompts=mask_target_prompts,
         target_size=target_size,
         crop_based_on_salience=crop_based_on_salience,
@@ -102,11 +130,6 @@ def preprocess(
 @torch.cuda.amp.autocast()
 def swin_ir_sr(
     images: List[Image.Image],
-    model_id: Literal[
-        "caidas/swin2SR-classical-sr-x2-64",
-        "caidas/swin2SR-classical-sr-x4-48",
-        "caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr",
-    ] = "caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr",
     target_size: Optional[Tuple[int, int]] = None,
     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
     **kwargs,
@@ -117,9 +140,10 @@ def swin_ir_sr(
     and will be returned as is.
 
     """
-
+    if not os.path.exists(SWIN2SR_PATH):
+        download_weights(SWIN2SR_URL, SWIN2SR_PATH)
     model = Swin2SRForImageSuperResolution.from_pretrained(
-        model_id, cache_dir=MODEL_PATH
+        SWIN2SR_PATH
     ).to(device)
     processor = Swin2SRImageProcessor()
 
@@ -153,9 +177,6 @@ def swin_ir_sr(
 def clipseg_mask_generator(
     images: List[Image.Image],
     target_prompts: Union[List[str], str],
-    model_id: Literal[
-        "CIDAS/clipseg-rd64-refined", "CIDAS/clipseg-rd16"
-    ] = "CIDAS/clipseg-rd64-refined",
     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
     bias: float = 0.01,
     temp: float = 1.0,
@@ -171,11 +192,12 @@ def clipseg_mask_generator(
         )
 
         target_prompts = [target_prompts] * len(images)
-
-    processor = CLIPSegProcessor.from_pretrained(model_id, cache_dir=MODEL_PATH)
-    model = CLIPSegForImageSegmentation.from_pretrained(
-        model_id, cache_dir=MODEL_PATH
-    ).to(device)
+    if not os.path.exists(CLIPSEG_PROCESSOR_PATH):
+        download_weights(CLIPSEG_PROCESSOR, CLIPSEG_PROCESSOR_PATH)
+    if not os.path.exists(CLIPSEG_PATH):
+        download_weights(CLIPSEG_URL, CLIPSEG_PATH)
+    processor = CLIPSegProcessor.from_pretrained(CLIPSEG_PROCESSOR_PATH)
+    model = CLIPSegForImageSegmentation.from_pretrained(CLIPSEG_PATH).to(device)
 
     masks = []
 
@@ -212,10 +234,6 @@ def clipseg_mask_generator(
 def blip_captioning_dataset(
     images: List[Image.Image],
     text: Optional[str] = None,
-    model_id: Literal[
-        "Salesforce/blip-image-captioning-large",
-        "Salesforce/blip-image-captioning-base",
-    ] = "Salesforce/blip-image-captioning-large",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     substitution_tokens: Optional[List[str]] = None,
     **kwargs,
@@ -223,10 +241,12 @@ def blip_captioning_dataset(
     """
     Returns a list of captions for the given images
     """
-    processor = BlipProcessor.from_pretrained(model_id, cache_dir=MODEL_PATH)
-    model = BlipForConditionalGeneration.from_pretrained(
-        model_id, cache_dir=MODEL_PATH
-    ).to(device)
+    if not os.path.exists(BLIP_PROCESSOR_PATH):
+        download_weights(BLIP_PROCESSOR_URL, BLIP_PROCESSOR_PATH)
+    if not os.path.exists(BLIP_PATH):
+        download_weights(BLIP_URL, BLIP_PATH)
+    processor = BlipProcessor.from_pretrained(BLIP_PROCESSOR_PATH)
+    model = BlipForConditionalGeneration.from_pretrained(BLIP_PATH).to(device)
     captions = []
     text = text.strip()
     print(f"Input captioning text: {text}")
@@ -428,6 +448,7 @@ def load_and_save_masks_and_captions(
     files: Union[str, List[str]],
     output_dir: str = TEMP_OUT_DIR,
     caption_text: Optional[str] = None,
+    caption_csv: Optional[str] = None,
     mask_target_prompts: Optional[Union[List[str], str]] = None,
     target_size: int = 1024,
     crop_based_on_salience: bool = True,
@@ -473,14 +494,29 @@ def load_and_save_masks_and_captions(
         if n_length == -1:
             n_length = len(files)
         files = sorted(files)[:n_length]
-        print(files)
+        print("Image files: ", files)
     images = [Image.open(file).convert("RGB") for file in files]
 
     # captions
-    print(f"Generating {len(images)} captions...")
-    captions = blip_captioning_dataset(
-        images, text=caption_text, substitution_tokens=substitution_tokens
-    )
+    if caption_csv:
+        print(f"Using provided captions")
+        caption_df = pd.read_csv(caption_csv)
+        # sort images to be consistent with 'sorted' above
+        caption_df = caption_df.sort_values('image_file')
+        captions = caption_df['caption'].values
+        print("Captions: ", captions)
+        if len(captions) != len(images):
+            print("Not the same number of captions as images!")
+            print(f"Num captions: {len(captions)}, Num images: {len(images)}")
+            print("Captions: ", captions)
+            print("Images: ", files)
+            raise Exception("Not the same number of captions as images! Check that all files passed in have a caption in captions.csv, and vice versa")
+                
+    else:
+        print(f"Generating {len(images)} captions...")
+        captions = blip_captioning_dataset(
+            images, text=caption_text, substitution_tokens=substitution_tokens
+        )
 
     if mask_target_prompts is None:
         mask_target_prompts = ""

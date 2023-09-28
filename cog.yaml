@@ -10,6 +10,7 @@ build:
     - "ffmpeg"
     - "libsm6"
     - "libxext6"
+    - "wget"
   python_packages:
     - "diffusers==0.19.3"
     - "torch==2.0.1"
