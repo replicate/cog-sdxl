@@ -96,7 +96,7 @@ class _NoInitOrTensorImpl:
                     mod.reset_parameters = cls._disable(mod.reset_parameters)
                 # When torch.empty is called, make it map to meta device by replacing
                 # the device in kwargs.
-                torch.empty = cls._meta_empty
+                torch.empty = cls._ORIGINAL_EMPTY
         reset_token = cls.is_active.set(True)
 
         try:
@@ -118,12 +118,5 @@ class _NoInitOrTensorImpl:
                 return func(*args, **kwargs)
 
         return wrapper
-
-    @staticmethod
-    def _meta_empty(*args, **kwargs):
-        # Behaves as torch.empty except in an active context
-        if _NoInitOrTensorImpl.is_active.get():
-            kwargs["device"] = "meta"
-        return _NoInitOrTensorImpl._ORIGINAL_EMPTY(*args, **kwargs)
 
     __init__ = None
