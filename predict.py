@@ -341,6 +341,10 @@ class Predictor(BasePredictor):
 
         if replicate_weights:
             self.load_trained_weights(replicate_weights, self.txt2img_pipe)
+        
+        # OOMs can leave vae in bad state
+        if self.txt2img_pipe.vae.dtype == torch.float32:
+            self.txt2img_pipe.vae.to(dtype=torch.float16)
 
         sdxl_kwargs = {}
         if self.tuned_model:
