@@ -333,9 +333,9 @@ class Predictor(BasePredictor):
             description="Replicate LoRA weights to use. Leave blank to use the default weights.",
             default=None,
         ),
-        use_safety_checker: bool = Input(
-            description="Use NSFW checker for generated images. Only available through the API, disable at your own risk.",
-            default=True
+        disable_safety_checker: bool = Input(
+            description="Disable NSFW checker for generated images. Only available through the API, disable at your own risk.",
+            default=False
         )
     ) -> List[Path]:
         """Run a single prediction on the model."""
@@ -419,12 +419,12 @@ class Predictor(BasePredictor):
             pipe.watermark = watermark_cache
             self.refiner.watermark = watermark_cache
 
-        if use_safety_checker:
+        if not disable_safety_checker:
             _, has_nsfw_content = self.run_safety_checker(output.images)
 
         output_paths = []
         for i, image in enumerate(output.images):
-            if use_safety_checker:
+            if not disable_safety_checker:
                 if has_nsfw_content[i]:
                     print(f"NSFW content detected in image {i}")
                     continue
