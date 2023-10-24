@@ -333,8 +333,12 @@ class Predictor(BasePredictor):
             description="Replicate LoRA weights to use. Leave blank to use the default weights.",
             default=None,
         ),
+        use_safety_checker: bool = Input(
+            description="Use NSFW checker for generated images. Only available through the API, disable at your own risk.",
+            default=True
+        )
     ) -> List[Path]:
-        """Run a single prediction on the model"""
+        """Run a single prediction on the model."""
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
@@ -415,15 +419,17 @@ class Predictor(BasePredictor):
             pipe.watermark = watermark_cache
             self.refiner.watermark = watermark_cache
 
-        _, has_nsfw_content = self.run_safety_checker(output.images)
+        if use_safety_checker:
+            _, has_nsfw_content = self.run_safety_checker(output.images)
 
         output_paths = []
-        for i, nsfw in enumerate(has_nsfw_content):
-            if nsfw:
-                print(f"NSFW content detected in image {i}")
-                continue
+        for i, image in enumerate(output.images):
+            if use_safety_checker:
+                if has_nsfw_content[i]:
+                    print(f"NSFW content detected in image {i}")
+                    continue
             output_path = f"/tmp/out-{i}.png"
-            output.images[i].save(output_path)
+            image.save(output_path)
             output_paths.append(Path(output_path))
 
         if len(output_paths) == 0:
