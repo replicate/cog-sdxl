@@ -116,9 +116,6 @@ class WeightsDownloadCache:
 
         st = time.time()
         # maybe retry with the real url if this doesn't work
-        url = url.replace(
-            "replicate.delivery/pbxt", "replicate-files.object.lga1.coreweave.com"
-        )
         try:
             output = subprocess.check_output(["pget", "-x", url, dest], close_fds=True)
             print(output)
