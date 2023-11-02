@@ -50,6 +50,8 @@ SWIN2SR_PATH = "./swin2sr-cache"
 TEMP_OUT_DIR = "./temp/"
 TEMP_IN_DIR = "./temp_in/"
 
+CSV_MATCH = "caption"
+
 
 def preprocess(
     input_images_filetype: str,
@@ -84,7 +86,7 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, TEMP_IN_DIR)
-                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in zip_info.filename:
+                if mt and mt[0] and mt[0] == 'text/csv' and CSV_MATCH in zip_info.filename:
                     zip_info.filename = os.path.basename(zip_info.filename)
                     zip_ref.extract(zip_info, TEMP_IN_DIR)
                     caption_csv = os.path.join(TEMP_IN_DIR, zip_info.filename)
@@ -101,7 +103,7 @@ def preprocess(
                 if mt and mt[0] and mt[0].startswith("image/"):
                     tar_info.name = os.path.basename(tar_info.name)
                     tar_ref.extract(tar_info, TEMP_IN_DIR)
-                if mt and mt[0] and mt[0] == 'text/csv' and 'caption.csv' in tar_info.name:
+                if mt and mt[0] and mt[0] == 'text/csv' and CSV_MATCH in tar_info.name:
                     tar_info.name = os.path.basename(tar_info.name)
                     tar_ref.extract(tar_info, TEMP_IN_DIR)
                     caption_csv = os.path.join(TEMP_IN_DIR, tar_info.name)
@@ -510,7 +512,7 @@ def load_and_save_masks_and_captions(
             print(f"Num captions: {len(captions)}, Num images: {len(images)}")
             print("Captions: ", captions)
             print("Images: ", files)
-            raise Exception("Not the same number of captions as images! Check that all files passed in have a caption in captions.csv, and vice versa")
+            raise Exception("Not the same number of captions as images! Check that all files passed in have a caption in your caption csv, and vice versa")
                 
     else:
         print(f"Generating {len(images)} captions...")
