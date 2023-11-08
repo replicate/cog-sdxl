@@ -85,6 +85,18 @@ class Predictor(BasePredictor):
         print("Loading fine-tuned model")
         self.is_lora = False
 
+        if not os.path.exists(os.path.join(local_weights_cache, "embeddings.pti")):
+            self.is_lora = True
+            print("Loading non-Replicate LoRA")
+
+            # this unloads Replicate LoRAs on the unet. We can ignore the modifications made to the text embeddings. 
+            pipe.unet.set_default_attn_processor()
+
+            fname = weights.split('/')[-1]
+            pipe.load_lora_weights(os.path.join(local_weights_cache, fname))
+            
+            return
+                
         maybe_unet_path = os.path.join(local_weights_cache, "unet.safetensors")
         if not os.path.exists(maybe_unet_path):
             print("Does not have Unet. assume we are using LoRA")
@@ -101,6 +113,9 @@ class Predictor(BasePredictor):
 
         else:
             print("Loading Unet LoRA")
+
+            # this unloads non-replicate loras. it's safe to call regardless. 
+            pipe.unload_lora_weights()
 
             unet = pipe.unet
 
