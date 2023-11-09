@@ -12,6 +12,7 @@ from diffusers.pipelines.stable_diffusion.safety_checker import (
 from diffusers.utils import load_image
 from transformers import CLIPImageProcessor
 from diffusers import DiffusionPipeline, LCMScheduler
+
 lcm_lora_id = "latent-consistency/lcm-lora-sdxl"
 
 SDXL_MODEL_CACHE = "./sdxl-cache"
@@ -50,10 +51,14 @@ class Predictor(BasePredictor):
         print("Loading sdxl txt2img pipeline...")
         if not os.path.exists(SDXL_MODEL_CACHE):
             download_weights(SDXL_URL, SDXL_MODEL_CACHE)
-        self.pipe = DiffusionPipeline.from_pretrained(SDXL_MODEL_CACHE, variant="fp16", torch_dtype=torch.float16, use_safetensors=True)
-        self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
+        self.pipe = DiffusionPipeline.from_pretrained(
+            SDXL_MODEL_CACHE,
+            variant="fp16",
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+        ).to("cuda")
         self.pipe.load_lora_weights(lcm_lora_id)
-        self.pipe.set_adapters(["lora"], adapter_weights=[1.0])
+        self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.to("cuda")
 
         if not os.path.exists(REFINER_MODEL_CACHE):
@@ -67,8 +72,7 @@ class Predictor(BasePredictor):
             torch_dtype=torch.float16,
             use_safetensors=True,
             variant="fp16",
-        )
-        self.refiner.to("cuda")
+        ).to("cuda")
         print("setup took: ", time.time() - start)
 
     def run_safety_checker(self, image):
@@ -137,8 +141,8 @@ class Predictor(BasePredictor):
         ),
         disable_safety_checker: bool = Input(
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
-            default=False
-        )
+            default=False,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
         if seed is None:
