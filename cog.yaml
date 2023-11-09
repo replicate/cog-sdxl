@@ -3,31 +3,17 @@
 
 build:
   gpu: true
-  cuda: "11.8"
-  python_version: "3.9"
-  system_packages:
-    - "libgl1-mesa-glx"
-    - "ffmpeg"
-    - "libsm6"
-    - "libxext6"
-    - "wget"
+  cuda: "12.1"
+  python_version: "3.11"
   python_packages:
-    - "diffusers==0.19.3"
-    - "torch==2.0.1"
-    - "transformers==4.31.0"
-    - "invisible-watermark==0.2.0"
-    - "accelerate==0.21.0"
-    - "pandas==2.0.3"
-    - "torchvision==0.15.2"
-    - "numpy==1.25.1"
-    - "pandas==2.0.3"
-    - "fire==0.5.0"
-    - "opencv-python>=4.1.0.25"
-    - "mediapipe==0.10.2"
+    - "peft==0.6.0"
+    - "diffusers==0.23.0"
+    - "torch==2.1.0 --extra-index-url https://download.pytorch.org/whl/cu121"
+    - "Pillow==10.1.0"
+    - "transformers==4.34.1"
+    - "accelerate==0.24.0"
 
   run:
     - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.3/pget" && chmod +x /usr/local/bin/pget
-    - wget http://thegiflibrary.tumblr.com/post/11565547760 -O face_landmarker_v2_with_blendshapes.task -q https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
     
 predict: "predict.py:Predictor"
-train: "train.py:train"
