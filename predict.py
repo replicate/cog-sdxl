@@ -2,16 +2,15 @@ import os
 import shutil
 import subprocess
 import time
-from typing import List
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from cog import BasePredictor, Input, Path
 from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
-from diffusers.utils import load_image
 from transformers import CLIPImageProcessor
-from diffusers import DiffusionPipeline, LCMScheduler
+from diffusers import DiffusionPipeline, LCMScheduler, DDIMScheduler
 
 lcm_lora_id = "latent-consistency/lcm-lora-sdxl"
 
@@ -26,19 +25,24 @@ REFINER_URL = (
 SAFETY_URL = "https://weights.replicate.delivery/default/sdxl/safety-1.0.tar"
 
 
-def download_weights(url, dest):
+def download_weights(url, dest, extract=True):
     start = time.time()
     print("downloading url: ", url)
     print("downloading to: ", dest)
-    subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
+    if extract:
+        cmd = ["pget", "-x", url, dest]
+    else:
+        cmd = ["pget", url, dest]
+    subprocess.check_call(cmd, close_fds=False)
     print("downloading took: ", time.time() - start)
 
 
 class Predictor(BasePredictor):
-    def setup(self):
+    def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
-
         start = time.time()
+
+        self.lora_url = 'setup'  # this allows us to load the weights on the first run
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
@@ -51,15 +55,19 @@ class Predictor(BasePredictor):
         print("Loading sdxl txt2img pipeline...")
         if not os.path.exists(SDXL_MODEL_CACHE):
             download_weights(SDXL_URL, SDXL_MODEL_CACHE)
-        self.pipe = DiffusionPipeline.from_pretrained(
+        self.txt2img = DiffusionPipeline.from_pretrained(
             SDXL_MODEL_CACHE,
             variant="fp16",
             torch_dtype=torch.float16,
             use_safetensors=True,
         ).to("cuda")
-        self.pipe.load_lora_weights(lcm_lora_id)
-        self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
-        self.pipe.to("cuda")
+        self.original_scheduler = self.txt2img.scheduler
+        if weights:
+            self.load_lora_weights(str(weights))
+        else:
+            self.load_lora_weights(None)
+
+        self.txt2img.to("cuda")
 
         if not os.path.exists(REFINER_MODEL_CACHE):
             download_weights(REFINER_URL, REFINER_MODEL_CACHE)
@@ -67,13 +75,46 @@ class Predictor(BasePredictor):
         print("Loading refiner pipeline...")
         self.refiner = DiffusionPipeline.from_pretrained(
             REFINER_MODEL_CACHE,
-            text_encoder_2=self.pipe.text_encoder_2,
-            vae=self.pipe.vae,
+            text_encoder_2=self.txt2img.text_encoder_2,
+            vae=self.txt2img.vae,
             torch_dtype=torch.float16,
             use_safetensors=True,
             variant="fp16",
         ).to("cuda")
         print("setup took: ", time.time() - start)
+
+    def load_lora_weights(self, weights_url, lcm_scale=1.0, style_scale=0.8):
+        if weights_url != self.lora_url:
+            self.txt2img.unload_lora_weights()
+
+            self.txt2img.load_lora_weights(lcm_lora_id, adapter_name="lcm")
+
+            if weights_url:
+                if os.path.exists("style-lora.safetensors"):
+                    os.remove("style-lora.safetensors")
+                download_weights(weights_url, "style-lora.safetensors", extract=False)
+                self.txt2img.load_lora_weights("style-lora.safetensors", adapter_name="style")
+                self.lora_url = weights_url
+            else:
+                self.lora_url = None
+
+        enable_lcm = lcm_scale > 0.0
+
+        if enable_lcm:
+            self.txt2img.scheduler = LCMScheduler.from_config(self.original_scheduler.config)
+        else:
+            # FIXME(ja): allow other schedulers than DDIM
+            self.txt2img.scheduler = DDIMScheduler.from_config(self.original_scheduler.config)
+
+        if enable_lcm and weights_url:
+            self.txt2img.set_adapters(["lcm", "style"], adapter_weights=[lcm_scale, style_scale])
+        elif enable_lcm:
+            self.txt2img.set_adapters(["lcm"], adapter_weights=[lcm_scale])
+        elif enable_lcm:
+            self.txt2img.set_adapters(["style"], adapter_weights=[style_scale])
+        else:
+            self.txt2img.set_adapters([])
+
 
     def run_safety_checker(self, image):
         safety_checker_input = self.feature_extractor(image, return_tensors="pt").to(
@@ -143,20 +184,34 @@ class Predictor(BasePredictor):
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
             default=False,
         ),
+        replicate_weights: str = Input(
+            description="safelora weights to use",
+            default=None,
+        ),
+        lcm_scale: float = Input(
+            description="Scale for LCM, if 0, the DDIM scheduler is used",
+            default=1.0,
+        ),
+        style_scale: float = Input(
+            description="Scale for style LoRA",
+            default=0.8,
+        )
     ) -> List[Path]:
         """Run a single prediction on the model."""
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
+        self.load_lora_weights(replicate_weights, lcm_scale, style_scale)
+
         # OOMs can leave vae in bad state
-        if self.pipe.vae.dtype == torch.float32:
-            self.pipe.vae.to(dtype=torch.float16)
+        if self.txt2img.vae.dtype == torch.float32:
+            self.txt2img.vae.to(dtype=torch.float16)
 
         sdxl_kwargs = {}
         sdxl_kwargs["width"] = width
         sdxl_kwargs["height"] = height
-        pipe = self.pipe
+        pipe = self.txt2img
 
         if refine == "expert_ensemble_refiner":
             sdxl_kwargs["output_type"] = "latent"

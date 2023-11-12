@@ -12,8 +12,9 @@ build:
     - "Pillow==10.1.0"
     - "transformers"
     - "accelerate"
-
+    - "hf_transfer==0.1.4"
   run:
     - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.3/pget" && chmod +x /usr/local/bin/pget
     
 predict: "predict.py:Predictor"
+train: "train.py:train"

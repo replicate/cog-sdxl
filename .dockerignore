@@ -1,5 +1,6 @@
 sdxl-cache/
 refiner-cache/
+lcm-cache/
 safety-cache/
 trained-model/
 *.png
@@ -33,3 +34,4 @@ clipseg-cache/
 swin2sr-cache/
 weights-cache/
 tests/
+*.safetensors
