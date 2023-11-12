@@ -10,7 +10,18 @@ from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
 from transformers import CLIPImageProcessor
-from diffusers import DiffusionPipeline, LCMScheduler, DDIMScheduler
+from diffusers import (
+    DDIMScheduler,
+    DiffusionPipeline,
+    DPMSolverMultistepScheduler,
+    EulerAncestralDiscreteScheduler,
+    EulerDiscreteScheduler,
+    HeunDiscreteScheduler,
+    PNDMScheduler,
+    LCMScheduler,
+    StableDiffusionXLImg2ImgPipeline,
+    StableDiffusionXLInpaintPipeline,
+)
 
 lcm_lora_id = "latent-consistency/lcm-lora-sdxl"
 
@@ -35,6 +46,22 @@ def download_weights(url, dest, extract=True):
         cmd = ["pget", url, dest]
     subprocess.check_call(cmd, close_fds=False)
     print("downloading took: ", time.time() - start)
+
+
+class KarrasDPM:
+    def from_config(config):
+        return DPMSolverMultistepScheduler.from_config(config, use_karras_sigmas=True)
+
+
+SCHEDULERS = {
+    "DDIM": DDIMScheduler,
+    "DPMSolverMultistep": DPMSolverMultistepScheduler,
+    "HeunDiscrete": HeunDiscreteScheduler,
+    "KarrasDPM": KarrasDPM,
+    "K_EULER_ANCESTRAL": EulerAncestralDiscreteScheduler,
+    "K_EULER": EulerDiscreteScheduler,
+    "PNDM": PNDMScheduler,
+}
 
 
 class Predictor(BasePredictor):
@@ -83,7 +110,7 @@ class Predictor(BasePredictor):
         ).to("cuda")
         print("setup took: ", time.time() - start)
 
-    def load_lora_weights(self, weights_url, lcm_scale=1.0, style_scale=0.8):
+    def load_lora_weights(self, weights_url, lcm_scale=1.0, style_scale=0.8, scheduler="DDIM"):
         if weights_url != self.lora_url:
             self.txt2img.unload_lora_weights()
 
@@ -103,8 +130,7 @@ class Predictor(BasePredictor):
         if enable_lcm:
             self.txt2img.scheduler = LCMScheduler.from_config(self.original_scheduler.config)
         else:
-            # FIXME(ja): allow other schedulers than DDIM
-            self.txt2img.scheduler = DDIMScheduler.from_config(self.original_scheduler.config)
+            self.txt2img.scheduler = SCHEDULERS[scheduler].from_config(self.original_scheduler.config)
 
         if enable_lcm and weights_url:
             self.txt2img.set_adapters(["lcm", "style"], adapter_weights=[lcm_scale, style_scale])
@@ -152,6 +178,11 @@ class Predictor(BasePredictor):
             le=4,
             default=1,
         ),
+        scheduler: str = Input(
+            description="noise scheduler - only applies if LCM is disabled",
+            choices=SCHEDULERS.keys(),
+            default="K_EULER",
+        ),
         num_inference_steps: int = Input(
             description="Number of denoising steps", ge=1, le=100, default=4
         ),
@@ -198,11 +229,14 @@ class Predictor(BasePredictor):
         )
     ) -> List[Path]:
         """Run a single prediction on the model."""
+
+        # FIXME(ja): add compel
+
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
-        self.load_lora_weights(replicate_weights, lcm_scale, style_scale)
+        self.load_lora_weights(replicate_weights, lcm_scale, style_scale, scheduler)
 
         # OOMs can leave vae in bad state
         if self.txt2img.vae.dtype == torch.float32:
