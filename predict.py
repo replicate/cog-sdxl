@@ -21,13 +21,10 @@ from diffusers import (
     StableDiffusionXLImg2ImgPipeline,
     StableDiffusionXLInpaintPipeline,
 )
-from diffusers.models.attention_processor import LoRAAttnProcessor2_0
 from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
 from diffusers.utils import load_image
-from safetensors import safe_open
-from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
 
 from dataset_and_utils import TokenEmbeddingsHandler
@@ -43,7 +40,6 @@ REFINER_URL = (
 SAFETY_URL = "https://weights.replicate.delivery/default/sdxl/safety-1.0.tar"
 HF_LORA_CACHE = "./lora.safetensors"
 HF_LORA_URL = "https://replicate.delivery/pbxt/dNfMk1CY2m3te0ysCE5lvqc4TptcgMMYUfCbGDTPigqIejdHB/lora.safetensors"
-
 
 class KarrasDPM:
     def from_config(config):
@@ -101,8 +97,8 @@ class Predictor(BasePredictor):
             use_safetensors=True,
             variant="fp16",
         )
-        self.txt2img_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
         self.txt2img_pipe.to("cuda")
+        self.txt2img_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
 
         print("Loading SDXL img2img pipeline...")
         self.img2img_pipe = StableDiffusionXLImg2ImgPipeline(
@@ -114,8 +110,8 @@ class Predictor(BasePredictor):
             unet=self.txt2img_pipe.unet,
             scheduler=self.txt2img_pipe.scheduler,
         )
-        self.img2img_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
         self.img2img_pipe.to("cuda")
+        self.img2img_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
 
         print("Loading SDXL inpaint pipeline...")
         self.inpaint_pipe = StableDiffusionXLInpaintPipeline(
@@ -127,8 +123,8 @@ class Predictor(BasePredictor):
             unet=self.txt2img_pipe.unet,
             scheduler=self.txt2img_pipe.scheduler,
         )
-        self.inpaint_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
         self.inpaint_pipe.to("cuda")
+        self.inpaint_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
 
         print("Loading SDXL refiner pipeline...")
         # FIXME(ja): should the vae/text_encoder_2 be loaded from SDXL always?
@@ -150,6 +146,8 @@ class Predictor(BasePredictor):
         )
         self.refiner.to("cuda")
         print("setup took: ", time.time() - start)
+        # print('active', self.txt2img_pipe.get_active_adapters())
+        # print('list', self.txt2img_pipe.get_list_adapters())
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
 
     def load_image(self, path):
@@ -280,8 +278,7 @@ class Predictor(BasePredictor):
             sdxl_kwargs["height"] = height
             pipe = self.txt2img_pipe
 
-        pipe.set_adapters(["style"], adapter_weights=[lora_scale])
-
+        # pipe.set_adapters(["style"], adapter_weights=[lora_scale])
 
         if refine == "expert_ensemble_refiner":
             sdxl_kwargs["output_type"] = "latent"
@@ -304,10 +301,8 @@ class Predictor(BasePredictor):
             "guidance_scale": guidance_scale,
             "generator": generator,
             "num_inference_steps": num_inference_steps,
+            "cross_attention_kwargs": {"scale": lora_scale}
         }
-
-        if self.is_lora:
-            sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
 
         output = pipe(**common_args, **sdxl_kwargs)
 
