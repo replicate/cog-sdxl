@@ -30,4 +30,3 @@ build:
     - wget http://thegiflibrary.tumblr.com/post/11565547760 -O face_landmarker_v2_with_blendshapes.task -q https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
     
 predict: "predict.py:Predictor"
-train: "train.py:train"

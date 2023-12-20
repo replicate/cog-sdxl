@@ -41,6 +41,8 @@ REFINER_URL = (
     "https://weights.replicate.delivery/default/sdxl/refiner-no-vae-no-encoder-1.0.tar"
 )
 SAFETY_URL = "https://weights.replicate.delivery/default/sdxl/safety-1.0.tar"
+HF_LORA_CACHE = "./lora.safetensors"
+HF_LORA_URL = "https://replicate.delivery/pbxt/dNfMk1CY2m3te0ysCE5lvqc4TptcgMMYUfCbGDTPigqIejdHB/lora.safetensors"
 
 
 class KarrasDPM:
@@ -59,112 +61,24 @@ SCHEDULERS = {
 }
 
 
-def download_weights(url, dest):
+def download_weights(url, dest, extract=True):
     start = time.time()
     print("downloading url: ", url)
     print("downloading to: ", dest)
-    subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
+    if extract:
+        subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
+    else:
+        subprocess.check_call(["pget", url, dest], close_fds=False)
     print("downloading took: ", time.time() - start)
 
 
 class Predictor(BasePredictor):
-    def load_trained_weights(self, weights, pipe):
-        from no_init import no_init_or_tensor
-
-        # weights can be a URLPath, which behaves in unexpected ways
-        weights = str(weights)
-        if self.tuned_weights == weights:
-            print("skipping loading .. weights already loaded")
-            return
-
-        self.tuned_weights = weights
-
-        local_weights_cache = self.weights_cache.ensure(weights)
-
-        # load UNET
-        print("Loading fine-tuned model")
-        self.is_lora = False
-
-        maybe_unet_path = os.path.join(local_weights_cache, "unet.safetensors")
-        if not os.path.exists(maybe_unet_path):
-            print("Does not have Unet. assume we are using LoRA")
-            self.is_lora = True
-
-        if not self.is_lora:
-            print("Loading Unet")
-
-            new_unet_params = load_file(
-                os.path.join(local_weights_cache, "unet.safetensors")
-            )
-            # this should return _IncompatibleKeys(missing_keys=[...], unexpected_keys=[])
-            pipe.unet.load_state_dict(new_unet_params, strict=False)
-
-        else:
-            print("Loading Unet LoRA")
-
-            unet = pipe.unet
-
-            tensors = load_file(os.path.join(local_weights_cache, "lora.safetensors"))
-
-            unet_lora_attn_procs = {}
-            name_rank_map = {}
-            for tk, tv in tensors.items():
-                # up is N, d
-                if tk.endswith("up.weight"):
-                    proc_name = ".".join(tk.split(".")[:-3])
-                    r = tv.shape[1]
-                    name_rank_map[proc_name] = r
-
-            for name, attn_processor in unet.attn_processors.items():
-                cross_attention_dim = (
-                    None
-                    if name.endswith("attn1.processor")
-                    else unet.config.cross_attention_dim
-                )
-                if name.startswith("mid_block"):
-                    hidden_size = unet.config.block_out_channels[-1]
-                elif name.startswith("up_blocks"):
-                    block_id = int(name[len("up_blocks.")])
-                    hidden_size = list(reversed(unet.config.block_out_channels))[
-                        block_id
-                    ]
-                elif name.startswith("down_blocks"):
-                    block_id = int(name[len("down_blocks.")])
-                    hidden_size = unet.config.block_out_channels[block_id]
-                with no_init_or_tensor():
-                    module = LoRAAttnProcessor2_0(
-                        hidden_size=hidden_size,
-                        cross_attention_dim=cross_attention_dim,
-                        rank=name_rank_map[name],
-                    )
-                unet_lora_attn_procs[name] = module.to("cuda", non_blocking=True)
-
-            unet.set_attn_processor(unet_lora_attn_procs)
-            unet.load_state_dict(tensors, strict=False)
-
-        # load text
-        handler = TokenEmbeddingsHandler(
-            [pipe.text_encoder, pipe.text_encoder_2], [pipe.tokenizer, pipe.tokenizer_2]
-        )
-        handler.load_embeddings(os.path.join(local_weights_cache, "embeddings.pti"))
-
-        # load params
-        with open(os.path.join(local_weights_cache, "special_params.json"), "r") as f:
-            params = json.load(f)
-        self.token_map = params
-
-        self.tuned_model = True
-
-    def setup(self, weights: Optional[Path] = None):
+    def setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
 
         start = time.time()
         self.tuned_model = False
         self.tuned_weights = None
-        if str(weights) == "weights":
-            weights = None
-
-        self.weights_cache = WeightsDownloadCache()
 
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
@@ -177,6 +91,9 @@ class Predictor(BasePredictor):
         if not os.path.exists(SDXL_MODEL_CACHE):
             download_weights(SDXL_URL, SDXL_MODEL_CACHE)
 
+        if not os.path.exists(HF_LORA_CACHE):
+            download_weights(HF_LORA_URL, HF_LORA_CACHE, extract=False)
+
         print("Loading sdxl txt2img pipeline...")
         self.txt2img_pipe = DiffusionPipeline.from_pretrained(
             SDXL_MODEL_CACHE,
@@ -184,10 +101,7 @@ class Predictor(BasePredictor):
             use_safetensors=True,
             variant="fp16",
         )
-        self.is_lora = False
-        if weights or os.path.exists("./trained-model"):
-            self.load_trained_weights(weights, self.txt2img_pipe)
-
+        self.txt2img_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
         self.txt2img_pipe.to("cuda")
 
         print("Loading SDXL img2img pipeline...")
@@ -200,6 +114,7 @@ class Predictor(BasePredictor):
             unet=self.txt2img_pipe.unet,
             scheduler=self.txt2img_pipe.scheduler,
         )
+        self.img2img_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
         self.img2img_pipe.to("cuda")
 
         print("Loading SDXL inpaint pipeline...")
@@ -212,6 +127,7 @@ class Predictor(BasePredictor):
             unet=self.txt2img_pipe.unet,
             scheduler=self.txt2img_pipe.scheduler,
         )
+        self.inpaint_pipe.load_lora_weights(HF_LORA_CACHE, adapter_name="style")
         self.inpaint_pipe.to("cuda")
 
         print("Loading SDXL refiner pipeline...")
@@ -324,14 +240,10 @@ class Predictor(BasePredictor):
             default=True,
         ),
         lora_scale: float = Input(
-            description="LoRA additive scale. Only applicable on trained models.",
+            description="LoRA additive scale. Higher values will result in more LoRA influence on the output image.",
             ge=0.0,
             le=1.0,
             default=0.6,
-        ),
-        replicate_weights: str = Input(
-            description="Replicate LoRA weights to use. Leave blank to use the default weights.",
-            default=None,
         ),
         disable_safety_checker: bool = Input(
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
@@ -343,18 +255,11 @@ class Predictor(BasePredictor):
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
-        if replicate_weights:
-            self.load_trained_weights(replicate_weights, self.txt2img_pipe)
-        
         # OOMs can leave vae in bad state
         if self.txt2img_pipe.vae.dtype == torch.float32:
             self.txt2img_pipe.vae.to(dtype=torch.float16)
 
         sdxl_kwargs = {}
-        if self.tuned_model:
-            # consistency with fine-tuning API
-            for k, v in self.token_map.items():
-                prompt = prompt.replace(k, v)
         print(f"Prompt: {prompt}")
         if image and mask:
             print("inpainting mode")
@@ -374,6 +279,9 @@ class Predictor(BasePredictor):
             sdxl_kwargs["width"] = width
             sdxl_kwargs["height"] = height
             pipe = self.txt2img_pipe
+
+        pipe.set_adapters(["style"], adapter_weights=[lora_scale])
+
 
         if refine == "expert_ensemble_refiner":
             sdxl_kwargs["output_type"] = "latent"
