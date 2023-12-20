@@ -12,7 +12,7 @@ build:
     - "libxext6"
     - "wget"
   python_packages:
-    - "diffusers==0.19.3"
+    - "diffusers==0.23.0"
     - "torch==2.0.1"
     - "transformers==4.31.0"
     - "invisible-watermark==0.2.0"
