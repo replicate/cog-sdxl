@@ -4,7 +4,7 @@
 build:
   gpu: true
   cuda: "11.8"
-  python_version: "3.9"
+  python_version: "3.11"
   system_packages:
     - "libgl1-mesa-glx"
     - "ffmpeg"
@@ -24,10 +24,10 @@ build:
     - "fire==0.5.0"
     - "opencv-python>=4.1.0.25"
     - "mediapipe==0.10.2"
-    -
-
+    - "https://r2.drysys.workers.dev/nyacomp/nyacomp-0.0.6-cp311-cp311-linux_x86_64.whl"
   run:
-    - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.3/pget" && chmod +x /usr/local/bin/pget
+    - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.5.6/pget" && chmod +x /usr/local/bin/pget
+    - curl -o /usr/local/bin/remotefile -L "https://r2.drysys.workers.dev/remotefile" && chmod +x /usr/local/bin/remotefile
     - wget http://thegiflibrary.tumblr.com/post/11565547760 -O face_landmarker_v2_with_blendshapes.task -q https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
     
 predict: "predict.py:Predictor"
