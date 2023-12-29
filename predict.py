@@ -154,6 +154,7 @@ class Predictor(BasePredictor):
         self.token_map = params
 
         self.tuned_model = True
+        print("setup took: ", time.time() - start)
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
@@ -164,8 +165,10 @@ class Predictor(BasePredictor):
         if str(weights) == "weights":
             weights = None
 
-        self.weights_cache = WeightsDownloadCache()
+        self.weights_cache = WeightsDownloadCache(base_dir="./data")
+        self.load_slow(weights)
 
+    def load_slow(self, weights: Optional[Path]):
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
             download_weights(SAFETY_URL, SAFETY_CACHE)
@@ -233,8 +236,30 @@ class Predictor(BasePredictor):
             variant="fp16",
         )
         self.refiner.to("cuda")
-        print("setup took: ", time.time() - start)
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
+
+    def dump(self):
+        bundle = [
+            self.refiner,
+            self.txt2img_pipe,
+            self.feature_extractor,
+            self.safety_checker,
+        ]
+        torch.save(bundle, "/tmp/sdxl_bundle_raw.pth")
+
+    def load(self):
+        os.environ["PRELOAD_PATH"] = "https://r2.drysys.workers.dev/sdxl/nya/meta.csv"
+        os.environ["DOWNLOAD"] = "1"
+        import nyacomp
+
+        (
+            self.refiner,
+            self.txt2img_pipe,
+            self.feature_extractor,
+            self.safety_checker,
+        ) = nyacomp.load_compressed_pickle("data/sdxl_bundle.pth")
+        if weights or os.path.exists("./trained-model"):
+            self.load_trained_weights(weights, self.txt2img_pipe)
 
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
@@ -335,8 +360,8 @@ class Predictor(BasePredictor):
         ),
         disable_safety_checker: bool = Input(
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
-            default=False
-        )
+            default=False,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
         if seed is None:
@@ -345,7 +370,7 @@ class Predictor(BasePredictor):
 
         if replicate_weights:
             self.load_trained_weights(replicate_weights, self.txt2img_pipe)
-        
+
         # OOMs can leave vae in bad state
         if self.txt2img_pipe.vae.dtype == torch.float32:
             self.txt2img_pipe.vae.to(dtype=torch.float16)
