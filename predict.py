@@ -1,3 +1,11 @@
+import multiprocessing as mp
+
+if mp.current_process().name != "MainProcess":
+    import set_env # set preload path etc
+    import nyacomp  # start preload
+else:
+    nyacomp = None
+
 import hashlib
 import json
 import os
@@ -166,7 +174,10 @@ class Predictor(BasePredictor):
             weights = None
 
         self.weights_cache = WeightsDownloadCache(base_dir="./data")
-        self.load_slow(weights)
+        if nyacomp is None:
+            self.load_slow(weights)
+        else:
+            self.load_fast()
 
     def load_slow(self, weights: Optional[Path]):
         print("Loading safety checker...")
@@ -247,11 +258,7 @@ class Predictor(BasePredictor):
         ]
         torch.save(bundle, "/tmp/sdxl_bundle_raw.pth")
 
-    def load(self):
-        os.environ["PRELOAD_PATH"] = "https://r2.drysys.workers.dev/sdxl/nya/meta.csv"
-        os.environ["DOWNLOAD"] = "1"
-        import nyacomp
-
+    def load_fast(self):
         (
             self.refiner,
             self.txt2img_pipe,
