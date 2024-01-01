@@ -40,7 +40,6 @@ from diffusers.pipelines.stable_diffusion.safety_checker import (
     StableDiffusionSafetyChecker,
 )
 from diffusers.utils import load_image
-from safetensors import safe_open
 from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
 
@@ -85,6 +84,7 @@ class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
         from no_init import no_init_or_tensor
 
+        start = time.time()
         # weights can be a URLPath, which behaves in unexpected ways
         weights = str(weights)
         if self.tuned_weights == weights:
@@ -168,12 +168,10 @@ class Predictor(BasePredictor):
         self.token_map = params
 
         self.tuned_model = True
-        print("setup took: ", time.time() - start)
+        print("load_trained_weights took: ", time.time() - start)
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
-
-        start = time.time()
         self.tuned_model = False
         self.tuned_weights = None
         if str(weights) == "weights":
@@ -183,10 +181,11 @@ class Predictor(BasePredictor):
         if nyacomp is None:
             self.load_slow(weights)
         else:
-            self.load_fast()
+            self.load_fast(weights)
 
     def load_slow(self, weights: Optional[Path]):
         print("Loading safety checker...")
+        start = time.time()
         if not os.path.exists(SAFETY_CACHE):
             download_weights(SAFETY_URL, SAFETY_CACHE)
         self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
@@ -254,6 +253,7 @@ class Predictor(BasePredictor):
         )
         self.refiner.to("cuda")
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
+        print(f"setup took {time.time() - start:.3f}")
 
     def dump(self):
         bundle = [
@@ -264,7 +264,7 @@ class Predictor(BasePredictor):
         ]
         torch.save(bundle, "/tmp/sdxl_bundle_raw.pth")
 
-    def load_fast(self):
+    def load_fast(self, weights):
         (
             self.refiner,
             self.txt2img_pipe,
