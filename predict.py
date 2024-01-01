@@ -178,6 +178,7 @@ class Predictor(BasePredictor):
             weights = None
 
         self.weights_cache = WeightsDownloadCache(base_dir="./data")
+        self.is_lora = False
         if nyacomp is None:
             self.load_slow(weights)
         else:
@@ -203,7 +204,6 @@ class Predictor(BasePredictor):
             use_safetensors=True,
             variant="fp16",
         )
-        self.is_lora = False
         if weights or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
 
