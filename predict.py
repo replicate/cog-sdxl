@@ -1,7 +1,13 @@
 import multiprocessing as mp
+import fcntl
+import os
+
 
 if mp.current_process().name != "MainProcess":
-    import set_env # set preload path etc
+    import set_env  # set preload path etc
+    if not os.getenv("SKIP_SETPIPE_SZ"):
+        fd, _ = os.pipe()
+        fcntl.fcntl(fd, 1031, 1024 * 1024)
     import nyacomp  # start preload
 else:
     nyacomp = None
@@ -264,7 +270,7 @@ class Predictor(BasePredictor):
             self.txt2img_pipe,
             self.feature_extractor,
             self.safety_checker,
-        ) = nyacomp.load_compressed_pickle("data/sdxl_bundle.pth")
+        ) = nyacomp.load_compressed_pickle("boneless_model.pth")
         if weights or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
 
@@ -370,6 +376,7 @@ class Predictor(BasePredictor):
             default=False,
         ),
     ) -> List[Path]:
+        # self.load_fast(settings)
         """Run a single prediction on the model."""
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
