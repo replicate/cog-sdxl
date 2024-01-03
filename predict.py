@@ -1,13 +1,7 @@
 import multiprocessing as mp
-import fcntl
-import os
-
 
 if mp.current_process().name != "MainProcess":
     import set_env  # set preload path etc
-    if not os.getenv("SKIP_SETPIPE_SZ"):
-        fd, _ = os.pipe()
-        fcntl.fcntl(fd, 1031, 1024 * 1024)
     import nyacomp  # start preload
 else:
     nyacomp = None
@@ -172,6 +166,7 @@ class Predictor(BasePredictor):
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
+        #time.sleep(60*30)
         self.tuned_model = False
         self.tuned_weights = None
         if str(weights) == "weights":
@@ -253,7 +248,7 @@ class Predictor(BasePredictor):
         )
         self.refiner.to("cuda")
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
-        print(f"setup took {time.time() - start:.3f}")
+        print(f"setup took {time.time() - start:.3f}s")
 
     def dump(self):
         bundle = [
@@ -265,6 +260,7 @@ class Predictor(BasePredictor):
         torch.save(bundle, "/tmp/sdxl_bundle_raw.pth")
 
     def load_fast(self, weights):
+        start = time.time()
         (
             self.refiner,
             self.txt2img_pipe,
@@ -273,6 +269,18 @@ class Predictor(BasePredictor):
         ) = nyacomp.load_compressed_pickle("boneless_model.pth")
         if weights or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
+        print(f"load_fast took {time.time() - start:.3f}s")
+
+    def reload_weights(self, envvars_json: str) -> None:
+        envvars: dict[str, str] = json.loads(envvars_json)
+        prev_vars = dict(os.environ)
+        os.environ.update(envvars)
+        nyacomp.decompressor = None
+        try:
+            self.load_fast(None)
+        finally:
+            whiteout = {v: "" for v in os.environ.keys() if v not in prev_vars}
+            os.environ.update(whiteout | prev_vars)
 
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
@@ -375,9 +383,14 @@ class Predictor(BasePredictor):
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
             default=False,
         ),
+        load_settings_json: str = Input(
+            description="if set, these are envvars to apply while reloading the model",
+            default='{"RUN": "0"}',
+        ),
     ) -> List[Path]:
-        # self.load_fast(settings)
         """Run a single prediction on the model."""
+        if load_settings_json != '{"RUN": "0"}':
+            self.reload_weights(load_settings_json)
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")

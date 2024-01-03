@@ -1,7 +1,9 @@
 import os
 
 env = os.environ
-env["DEBUG"] = "1"
+env["NVCOMP_LOG_LEVEL"] = "2" # warn
+env["NVCOMP_LOG_FILE"] = "stderr"
+#env["DEBUG"] = "1"
 env["PRELOAD_PATH"] = "meta.csv"
 # nv_ld = "/usr/lib/x86_64-linux-gnu:/usr/local/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/cuda/lib64"
 # env["LD_LIBRARY_PATH"] = f"{env['LD_LIBRARY_PATH']}:{nv_ld}"
