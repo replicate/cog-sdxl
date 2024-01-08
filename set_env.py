@@ -1,6 +1,10 @@
 import os
 
 env = os.environ
+# this is just to recompress
+# env["LOAD_UNCOMPRESSED"] = "1"
+# env["NO_PRELOAD"] = "1"
+
 env["NVCOMP_LOG_LEVEL"] = "2" # warn
 env["NVCOMP_LOG_FILE"] = "stderr"
 #env["DEBUG"] = "1"

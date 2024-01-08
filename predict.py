@@ -6,6 +6,7 @@ if mp.current_process().name != "MainProcess":
 else:
     nyacomp = None
 
+import contextlib
 import hashlib
 import json
 import os
@@ -13,11 +14,10 @@ import shutil
 import subprocess
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from weights import WeightsDownloadCache
 
+from cog import BasePredictor, Input, Path
 import numpy as np
 import torch
-from cog import BasePredictor, Input, Path
 from diffusers import (
     DDIMScheduler,
     DiffusionPipeline,
@@ -38,6 +38,7 @@ from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
 
 from dataset_and_utils import TokenEmbeddingsHandler
+from weights import WeightsDownloadCache
 
 SDXL_MODEL_CACHE = "./sdxl-cache"
 REFINER_MODEL_CACHE = "./refiner-cache"
@@ -73,6 +74,14 @@ def download_weights(url, dest):
     subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
     print("downloading took: ", time.time() - start)
 
+@contextlib.contextmanager
+def override_env(environ_json: str) -> None:
+    envvars: dict[str, str] = json.loads(environ_json)
+    prev_vars = dict(os.environ)
+    os.environ.update(envvars)
+    yield 
+    whiteout = {v: "" for v in os.environ.keys() if v not in prev_vars}
+    os.environ.update(whiteout | prev_vars)
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
@@ -174,7 +183,7 @@ class Predictor(BasePredictor):
 
         self.weights_cache = WeightsDownloadCache(base_dir="./data")
         self.is_lora = False
-        if nyacomp is None:
+        if nyacomp is None or os.getenv("LOAD_UNCOMPRESSED"):
             self.load_slow(weights)
         else:
             self.load_fast(weights)
@@ -251,13 +260,28 @@ class Predictor(BasePredictor):
         print(f"setup took {time.time() - start:.3f}s")
 
     def dump(self):
-        bundle = [
+        return [
             self.refiner,
             self.txt2img_pipe,
             self.feature_extractor,
             self.safety_checker,
         ]
-        torch.save(bundle, "/tmp/sdxl_bundle_raw.pth")
+
+    def compress(self, environ_json: str) -> list[str, Path]:
+        os.environ["NO_PRELOAD"] = "1"
+        import nyacomp
+
+        # self.load_slow(None) # this is pretty optional
+        bundle = self.dump()
+        dir = Path("compressed_model")
+        if dir.exists():
+            dir.rename("prev_compressed")
+        dir.mkdir()
+        with override_env(environ_json):
+            nyacomp.compress_pickle(bundle, f"{dir}/boneless_model.pth")
+        # we would prefer to upload only {*pth,nya/*.{gz,raw}} and return meta.csv and merged_tensors.csv as str
+        # but we can't be picky and the urls have the filename anyway
+        return [Path(p) for p in dir.glob("**/*") if p.is_file()]
 
     def load_fast(self, weights):
         start = time.time()
@@ -272,15 +296,10 @@ class Predictor(BasePredictor):
         print(f"load_fast took {time.time() - start:.3f}s")
 
     def reload_weights(self, envvars_json: str) -> None:
-        envvars: dict[str, str] = json.loads(envvars_json)
-        prev_vars = dict(os.environ)
-        os.environ.update(envvars)
-        nyacomp.decompressor = None
-        try:
+        with override_env(envvars_json):
+            nyacomp.decompressor = None
             self.load_fast(None)
-        finally:
-            whiteout = {v: "" for v in os.environ.keys() if v not in prev_vars}
-            os.environ.update(whiteout | prev_vars)
+
 
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
@@ -384,12 +403,14 @@ class Predictor(BasePredictor):
             default=False,
         ),
         load_settings_json: str = Input(
-            description="if set, these are envvars to apply while reloading the model",
+            description="if set, these are envvars to apply while reloading or recompressing the model",
             default='{"RUN": "0"}',
         ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
         if load_settings_json != '{"RUN": "0"}':
+            if "COMPRESS" in load_settings_json:
+                return self.compress(load_settings_json)
             self.reload_weights(load_settings_json)
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
