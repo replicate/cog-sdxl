@@ -18,7 +18,7 @@ env["DOWNLOAD"] = "1"
 env["REMOTE_CSV"] = "0"
 env["DOWNLOADER_PATH"] = "/usr/local/bin/remotefile"
 env["NOTIME"] = "1"
-env["VMSPLICE"] = "1"
+#env["VMSPLICE"] = "1"
 #env["SKIP_SETPIPE_SZ"] = "1"
 #os.system("ln -s /boneless_model.pth /src/boneless_model.pth") # ugh
 os.system("ln -s /usr/local/lib/python3.11/site-packages/torch/lib/libcudart-d0da41ae.so.11.0 /usr/lib/libcudart.so.11.0")
