@@ -4,7 +4,7 @@
 build:
   gpu: true
   cuda: "11.8"
-  python_version: "3.9"
+  python_version: "3.11"
   system_packages:
     - "libgl1-mesa-glx"
     - "ffmpeg"
@@ -12,11 +12,11 @@ build:
     - "libxext6"
     - "wget"
   python_packages:
-    - "diffusers==0.19.3"
+    - "diffusers==0.21.2"
     - "torch==2.0.1"
-    - "transformers==4.31.0"
+    - "transformers==4.35.2"
     - "invisible-watermark==0.2.0"
-    - "accelerate==0.21.0"
+    # - "accelerate==0.21.0"
     - "pandas==2.0.3"
     - "torchvision==0.15.2"
     - "numpy==1.25.1"
@@ -24,10 +24,12 @@ build:
     - "fire==0.5.0"
     - "opencv-python>=4.1.0.25"
     - "mediapipe==0.10.2"
-
+    - "https://r2.drysys.workers.dev/nyacomp/nyacomp-0.1.0-cp311-cp311-linux_x86_64.whl"
   run:
-    - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.0.3/pget" && chmod +x /usr/local/bin/pget
-    - wget http://thegiflibrary.tumblr.com/post/11565547760 -O face_landmarker_v2_with_blendshapes.task -q https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+    - pip install "https://r2.drysys.workers.dev/nyacomp/nyacomp-0.1.5-cp311-cp311-linux_x86_64.whl"
+    - mkdir /src; curl -Lo /src/boneless_model.pth https://weights.replicate.delivery/default/sdxl-nyacomp2/boneless_model.pth
+    - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.5.6/pget_linux_x86_64" && chmod +x /usr/local/bin/pget
+    - curl -o /usr/local/bin/remotefile -L "https://r2.drysys.workers.dev/remotefile#" && chmod +x /usr/local/bin/remotefile
     
 predict: "predict.py:Predictor"
 train: "train.py:train"
