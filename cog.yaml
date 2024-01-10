@@ -29,7 +29,7 @@ build:
     - pip install "https://r2.drysys.workers.dev/nyacomp/nyacomp-0.1.5-cp311-cp311-linux_x86_64.whl"
     - mkdir /src; curl -Lo /src/boneless_model.pth https://weights.replicate.delivery/default/sdxl-nyacomp2/boneless_model.pth
     - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/download/v0.5.6/pget_linux_x86_64" && chmod +x /usr/local/bin/pget
-    - curl -o /usr/local/bin/remotefile -L "https://r2.drysys.workers.dev/remotefile#" && chmod +x /usr/local/bin/remotefile
+    - curl -o /usr/local/bin/remotefile -L "https://r2.drysys.workers.dev/remotefile" && chmod +x /usr/local/bin/remotefile
     
 predict: "predict.py:Predictor"
 train: "train.py:train"

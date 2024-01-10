@@ -4,10 +4,9 @@ env = os.environ
 # this is just to recompress
 # env["LOAD_UNCOMPRESSED"] = "1"
 # env["NO_PRELOAD"] = "1"
-
 env["NVCOMP_LOG_LEVEL"] = "2" # warn
 env["NVCOMP_LOG_FILE"] = "stderr"
-#env["DEBUG"] = "1"
+#env["DEBUG"] = "1" # noisy 
 env["PRELOAD_PATH"] = "meta.csv"
 # nv_ld = "/usr/lib/x86_64-linux-gnu:/usr/local/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/cuda/lib64"
 # env["LD_LIBRARY_PATH"] = f"{env['LD_LIBRARY_PATH']}:{nv_ld}"
@@ -17,9 +16,9 @@ env["NUM_STREAMS"] = "40"
 env["DOWNLOAD"] = "1"
 env["REMOTE_CSV"] = "0"
 env["DOWNLOADER_PATH"] = "/usr/local/bin/remotefile"
-env["NOTIME"] = "1"
-env["VMSPLICE"] = "1"
-#env["SKIP_SETPIPE_SZ"] = "1"
+env["NOTIME"] = "1" # disable hot loop timing
+#env["VMSPLICE"] = "1" # broken for now
+#env["SKIP_SETPIPE_SZ"] = "1" # potentially needed for A40s
 #os.system("ln -s /boneless_model.pth /src/boneless_model.pth") # ugh
 os.system("ln -s /usr/local/lib/python3.11/site-packages/torch/lib/libcudart-d0da41ae.so.11.0 /usr/lib/libcudart.so.11.0")
 # SYMLINK_CUDART shouldn't be needed probably...
