@@ -6,6 +6,7 @@ if mp.current_process().name != "MainProcess":
 else:
     nyacomp = None
 
+import contextlib
 import hashlib
 import json
 import os
@@ -73,6 +74,14 @@ def download_weights(url, dest):
     subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
     print("downloading took: ", time.time() - start)
 
+@contextlib.contextmanager
+def override_env(environ_json: str) -> None:
+    envvars: dict[str, str] = json.loads(environ_json)
+    prev_vars = dict(os.environ)
+    os.environ.update(envvars)
+    yield
+    whiteout = {v: "" for v in os.environ.keys() if v not in prev_vars}
+    os.environ.update(whiteout | prev_vars)
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
@@ -257,6 +266,22 @@ class Predictor(BasePredictor):
             self.safety_checker,
         ]
 
+    def compress(self, environ_json: str) -> list[str, Path]:
+        os.environ["NO_PRELOAD"] = "1"
+        import nyacomp
+
+        # self.load_slow(None) # this is pretty optional
+        bundle = self.dump()
+        dir = Path("compressed_model")
+        if dir.exists():
+            dir.rename("prev_compressed")
+        dir.mkdir()
+        with override_env(environ_json):
+            nyacomp.compress_pickle(bundle, f"{dir}/boneless_model.pth")
+        # we would prefer to upload only {*pth,nya/*.{gz,raw}} and return meta.csv and merged_tensors.csv as str
+        # but we can't be picky and the urls have the filename anyway
+        return [Path(p) for p in dir.glob("**/*") if p.is_file()]
+
     def load_fast(self, weights):
         start = time.time()
         (
@@ -268,6 +293,12 @@ class Predictor(BasePredictor):
         if weights or os.path.exists("./trained-model"):
             self.load_trained_weights(weights, self.txt2img_pipe)
         print(f"load_fast took {time.time() - start:.3f}s")
+
+    def reload_weights(self, envvars_json: str) -> None:
+        with override_env(envvars_json):
+            nyacomp.decompressor = None
+            self.load_fast(None)
+
 
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
@@ -370,8 +401,16 @@ class Predictor(BasePredictor):
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
             default=False,
         ),
+        load_settings_json: str = Input(
+            description="if set, these are envvars to apply while reloading or recompressing the model",
+            default='{"RUN": "0"}',
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
+        if load_settings_json != '{"RUN": "0"}':
+            if "COMPRESS" in load_settings_json:
+                return self.compress(load_settings_json)
+            self.reload_weights(load_settings_json)
         if seed is None:
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
