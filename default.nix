@@ -5,7 +5,7 @@
       url = "https://weights.replicate.delivery/default/sdxl-nyacomp2/boneless_model.pth";
       hash = "sha256-M5/uReNxSK0iZ5CpFUw2uKpzNusbgqgQbHS6LMw/YIg=";
     };
-  } ''mkdir -p $out/src && cp $src $out/src/boneless.pth'';
+  } ''mkdir -p $out/src && cp $src $out/src/boneless_model.pth'';
 
   remotefile = pkgs.runCommand "remotefile" {
     src = pkgs.fetchurl {
