@@ -6,7 +6,7 @@ import subprocess
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from weights import WeightsDownloadCache
-
+from DeepCache import DeepCacheSDHelper
 import numpy as np
 import torch
 from cog import BasePredictor, Input, Path
@@ -165,7 +165,7 @@ class Predictor(BasePredictor):
             weights = None
 
         self.weights_cache = WeightsDownloadCache()
-
+        self.deep_cache = None
         print("Loading safety checker...")
         if not os.path.exists(SAFETY_CACHE):
             download_weights(SAFETY_URL, SAFETY_CACHE)
@@ -333,10 +333,19 @@ class Predictor(BasePredictor):
             description="Replicate LoRA weights to use. Leave blank to use the default weights.",
             default=None,
         ),
+        enable_deepcache: bool = Input(description="Enable DeepCache", default=True),
+        deepcache_branch_id: int = Input(
+            description="Which branch of the network (ordered from the shallowest to the deepest layer) is responsible for executing the caching processes. Lower branch_id leads to faster inference at the expense of quality.",
+            default=0,
+        ),
+        deepcache_interval: int = Input(
+            description="Frequency of feature caching, specified as the number of steps between each cache operation. Higher cache interval leads to faster inference at the expense of quality.",
+            default=3,
+        ),
         disable_safety_checker: bool = Input(
             description="Disable safety checker for generated images. This feature is only available through the API. See [https://replicate.com/docs/how-does-replicate-work#safety](https://replicate.com/docs/how-does-replicate-work#safety)",
-            default=False
-        )
+            default=False,
+        ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
         if seed is None:
@@ -345,7 +354,7 @@ class Predictor(BasePredictor):
 
         if replicate_weights:
             self.load_trained_weights(replicate_weights, self.txt2img_pipe)
-        
+
         # OOMs can leave vae in bad state
         if self.txt2img_pipe.vae.dtype == torch.float32:
             self.txt2img_pipe.vae.to(dtype=torch.float16)
@@ -375,6 +384,12 @@ class Predictor(BasePredictor):
             sdxl_kwargs["height"] = height
             pipe = self.txt2img_pipe
 
+        # Unset DeepCache if flag unset or if pipe has changed
+        if not enable_deepcache:
+            if self.deep_cache is not None:
+                self.deep_cache.disable()
+                self.deep_cache = None
+
         if refine == "expert_ensemble_refiner":
             sdxl_kwargs["output_type"] = "latent"
             sdxl_kwargs["denoising_end"] = high_noise_frac
@@ -387,6 +402,15 @@ class Predictor(BasePredictor):
             pipe.watermark = None
             self.refiner.watermark = None
 
+        # Enable DeepCache if flag is set, but only if pipe has changed or DeepCache is not already enabled
+        if enable_deepcache and self.deep_cache is None:
+            print("Using DeepCache")
+            self.deep_cache = DeepCacheSDHelper(pipe=pipe)
+            self.deep_cache.set_params(
+                cache_interval=deepcache_interval,
+                cache_branch_id=deepcache_branch_id,
+            )
+            self.deep_cache.enable()
         pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
         generator = torch.Generator("cuda").manual_seed(seed)
 
@@ -400,7 +424,7 @@ class Predictor(BasePredictor):
 
         if self.is_lora:
             sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
-
+        print(pipe)
         output = pipe(**common_args, **sdxl_kwargs)
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:

@@ -15,7 +15,6 @@ import torch
 __all__ = ["no_init_or_tensor"]
 
 
-
 Model = TypeVar("Model")
 
 
