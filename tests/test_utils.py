@@ -3,11 +3,12 @@ import json
 import requests
 import time
 from threading import Thread, Lock
-import re 
+import re
 import multiprocessing
 import subprocess
 
 ERROR_PATTERN = re.compile(r"ERROR:")
+
 
 def get_image_name():
     current_dir = os.path.basename(os.getcwd())
@@ -19,7 +20,7 @@ def get_image_name():
 
 
 def process_log_line(line):
-    line = line.decode('utf-8').strip()
+    line = line.decode("utf-8").strip()
     try:
         log_data = json.loads(line)
         return json.dumps(log_data, indent=2)
@@ -28,7 +29,7 @@ def process_log_line(line):
 
 
 def capture_output(pipe, print_lock, logs=None, error_detected=None):
-    for line in iter(pipe.readline, b''):
+    for line in iter(pipe.readline, b""):
         formatted_line = process_log_line(line)
         with print_lock:
             print(formatted_line)
@@ -52,15 +53,17 @@ def wait_for_server_to_be_ready(url, timeout=300):
         try:
             response = requests.get(url)
             data = response.json()
-            
+
             if data["status"] == "READY":
                 return
             elif data["status"] == "SETUP_FAILED":
-                raise RuntimeError("Server initialization failed with status: SETUP_FAILED")
-            
+                raise RuntimeError(
+                    "Server initialization failed with status: SETUP_FAILED"
+                )
+
         except requests.RequestException:
             pass
-        
+
         if time.time() - start_time > timeout:
             raise TimeoutError("Server did not become ready in the expected time.")
 
@@ -77,8 +80,12 @@ def run_training_subprocess(command):
     error_detected = multiprocessing.Manager().list([False])
 
     # Start two separate processes to handle stdout and stderr
-    stdout_processor = multiprocessing.Process(target=capture_output, args=(process.stdout, print_lock, logs, error_detected))
-    stderr_processor = multiprocessing.Process(target=capture_output, args=(process.stderr, print_lock, logs, error_detected))
+    stdout_processor = multiprocessing.Process(
+        target=capture_output, args=(process.stdout, print_lock, logs, error_detected)
+    )
+    stderr_processor = multiprocessing.Process(
+        target=capture_output, args=(process.stderr, print_lock, logs, error_detected)
+    )
 
     # Start the log processors
     stdout_processor.start()
