@@ -7,13 +7,13 @@ env = os.environ
 
 env["NVCOMP_LOG_LEVEL"] = "2" # warn
 env["NVCOMP_LOG_FILE"] = "stderr"
-#env["DEBUG"] = "1"
+env["DEBUG"] = "1"
 env["PRELOAD_PATH"] = "meta.csv"
 # nv_ld = "/usr/lib/x86_64-linux-gnu:/usr/local/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/cuda/lib64"
 # env["LD_LIBRARY_PATH"] = f"{env['LD_LIBRARY_PATH']}:{nv_ld}"
 # env["PATH"]=f"{env['PATH']}:/usr/local/nvidia/bin"
-env["NUM_THREADS"] = "30"
-env["NUM_STREAMS"] = "30"
+env["NUM_THREADS"] = "25"
+env["NUM_STREAMS"] = "50"
 env["DOWNLOAD"] = "1"
 env["REMOTE_CSV"] = "0"
 env["DOWNLOADER_PATH"] = "/usr/local/bin/remotefile"
