@@ -449,7 +449,7 @@ class Predictor(BasePredictor):
             del image
             del mask
 
-            if sdxl_kwargs and 'image' in sdxl_kwargs:
+            if sdxl_kwargs is not None and 'image' in sdxl_kwargs:
                 image_shape = sdxl_kwargs['image'].size
             sentry_sdk.capture_exception(e)
             raise e

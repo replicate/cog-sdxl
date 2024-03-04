@@ -83,6 +83,7 @@ def inference_func():
         return partial(local_run, LOCAL_ENDPOINT)
     elif ENV == 'staging':
         model = replicate.models.get(MODEL)
+        print(f"model,", model)
         version = model.versions.list()[0]
         return partial(replicate_run, MODEL, version.id)
     else:
@@ -124,9 +125,11 @@ def service():
         yield
 
 
-def image_equal_fuzzy(img_expected, img_actual, test_name='default', tol=5):
+def image_equal_fuzzy(img_expected, img_actual, test_name='default', tol=20):
     """
     Assert that average pixel values differ by less than tol across image
+    Tol determined empirically - holding everything else equal but varying seed 
+    generates images that vary by at least 50
     """
     img1 = np.array(img_expected, dtype=np.int32)
     img2 = np.array(img_actual, dtype=np.int32)

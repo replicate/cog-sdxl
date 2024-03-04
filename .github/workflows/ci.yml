@@ -97,4 +97,4 @@ jobs:
        REPLICATE_API_TOKEN: ${{secrets.REPLICATE_API_TOKEN}}
        TEST_ENV: 'staging'
       run: |
-        pytest test_predict.py
+        pytest tests/test_predict.py
