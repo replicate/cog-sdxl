@@ -77,7 +77,11 @@ class Predictor(BasePredictor):
             print("skipping loading .. weights already loaded")
             return
 
-        self.tuned_weights = weights
+        # predictions can be cancelled while in this function, which
+        # interrupts this finishing.  To protect against odd states we
+        # set tuned_weights to a value that lets the next prediction
+        # know if it should try to load weights or if loading completed
+        self.tuned_weights = 'loading'
 
         local_weights_cache = self.weights_cache.ensure(weights)
 
@@ -151,8 +155,9 @@ class Predictor(BasePredictor):
         # load params
         with open(os.path.join(local_weights_cache, "special_params.json"), "r") as f:
             params = json.load(f)
-        self.token_map = params
 
+        self.token_map = params
+        self.tuned_weights = weights
         self.tuned_model = True
 
     def setup(self, weights: Optional[Path] = None):
