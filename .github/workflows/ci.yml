@@ -105,7 +105,7 @@ jobs:
         REPLICATE_API_TOKEN: ${{secrets.REPLICATE_API_TOKEN}}
       
       run: |
-        apt-get install jq
+        sudo apt-get install jq
         export LATEST_VERSION=$(curl -s -H "Authorization: Token $REPLICATE_API_TOKEN" \
           https://api.replicate.com/v1/models/$STAGING_MODEL/versions | jq -r '.results[0].id')
         curl -s \
