@@ -11,6 +11,7 @@ jobs:
     env:
       BASE_MODEL: 'replicate-internal/official-sdxl-prod'
       STAGING_MODEL: 'replicate-internal/official-sdxl-staging'
+      STAGING_DEPLOYMENT: 'replicate-internal/sdxl-staging-official'
 
     steps:
     - name: checkout
@@ -98,3 +99,19 @@ jobs:
        TEST_ENV: 'staging'
       run: |
         pytest tests/test_predict.py
+
+    - name: update deployment
+      env: 
+        REPLICATE_API_TOKEN: ${{secrets.REPLICATE_API_TOKEN}}
+      
+      run: 
+        apt-get install jq
+        export LATEST_VERSION=$(curl -s -H "Authorization: Token $REPLICATE_API_TOKEN" \
+        https://api.replicate.com/v1/models/$STAGING_MODEL/versions | jq -r '.results[0].id')
+        curl -s \
+          -X PATCH \
+          -H "Authorization: Token $REPLICATE_API_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"version": "'$LATEST_VERSION'" }' \
+          https://api.replicate.com/v1/deployments/$STAGING_DEPLOYMENT
+        
