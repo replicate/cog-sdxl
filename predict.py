@@ -1,44 +1,54 @@
 import multiprocessing as mp
+import os
 
-if mp.current_process().name != "MainProcess":
+is_worker = mp.current_process().name != "MainProcess"
+
+if not is_worker:
+    nyacomp = None
+    EulerAncestralDiscreteScheduler = EulerDiscreteScheduler = PNDMScheduler = None
+    DDIMScheduler = DPMSolverMultistepScheduler = HeunDiscreteScheduler = None
+else:
     import set_env  # set preload path etc
     import nyacomp  # start preload
-else:
-    nyacomp = None
+
+    os.system(
+        "ln -s /lib/python3.11/site-packages/torch/lib/libcudart* /lib/python3.11/site-packages/nyacomp.libs/libcudart.so.11.0"
+    )
+
+    import shutil
+    import subprocess
+    import time
+
+    import numpy as np
+    import torch
+    from diffusers import (
+        DDIMScheduler,
+        DiffusionPipeline,
+        DPMSolverMultistepScheduler,
+        EulerAncestralDiscreteScheduler,
+        EulerDiscreteScheduler,
+        HeunDiscreteScheduler,
+        PNDMScheduler,
+        StableDiffusionXLImg2ImgPipeline,
+        StableDiffusionXLInpaintPipeline,
+    )
+    from diffusers.models.attention_processor import LoRAAttnProcessor2_0
+    from diffusers.pipelines.stable_diffusion.safety_checker import (
+        StableDiffusionSafetyChecker,
+    )
+    from diffusers.utils import load_image
+    from safetensors.torch import load_file
+    from transformers import CLIPImageProcessor
+
+    from dataset_and_utils import TokenEmbeddingsHandler
+    from weights import WeightsDownloadCache
 
 import contextlib
 import hashlib
 import json
-import os
-import shutil
-import subprocess
-import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from cog import BasePredictor, Input, Path
-import numpy as np
-import torch
-from diffusers import (
-    DDIMScheduler,
-    DiffusionPipeline,
-    DPMSolverMultistepScheduler,
-    EulerAncestralDiscreteScheduler,
-    EulerDiscreteScheduler,
-    HeunDiscreteScheduler,
-    PNDMScheduler,
-    StableDiffusionXLImg2ImgPipeline,
-    StableDiffusionXLInpaintPipeline,
-)
-from diffusers.models.attention_processor import LoRAAttnProcessor2_0
-from diffusers.pipelines.stable_diffusion.safety_checker import (
-    StableDiffusionSafetyChecker,
-)
-from diffusers.utils import load_image
-from safetensors.torch import load_file
-from transformers import CLIPImageProcessor
-
-from dataset_and_utils import TokenEmbeddingsHandler
-from weights import WeightsDownloadCache
 
 SDXL_MODEL_CACHE = "./sdxl-cache"
 REFINER_MODEL_CACHE = "./refiner-cache"
@@ -74,6 +84,7 @@ def download_weights(url, dest):
     subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
     print("downloading took: ", time.time() - start)
 
+
 @contextlib.contextmanager
 def override_env(environ_json: str) -> None:
     envvars: dict[str, str] = json.loads(environ_json)
@@ -82,6 +93,7 @@ def override_env(environ_json: str) -> None:
     yield
     whiteout = {v: "" for v in os.environ.keys() if v not in prev_vars}
     os.environ.update(whiteout | prev_vars)
+
 
 class Predictor(BasePredictor):
     def load_trained_weights(self, weights, pipe):
@@ -299,7 +311,6 @@ class Predictor(BasePredictor):
             nyacomp.decompressor = None
             self.load_fast(None)
 
-
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
         return load_image("/tmp/image.png").convert("RGB")
@@ -315,7 +326,7 @@ class Predictor(BasePredictor):
         )
         return image, has_nsfw_concept
 
-    @torch.inference_mode()
+    @(torch.inference_mode() if is_worker else lambda f: f)
     def predict(
         self,
         prompt: str = Input(
