@@ -11,9 +11,6 @@ else:
     import set_env  # set preload path etc
     import nyacomp  # start preload
 
-    os.system(
-        "ln -s /lib/python3.11/site-packages/torch/lib/libcudart* /lib/python3.11/site-packages/nyacomp.libs/libcudart.so.11.0"
-    )
 
     import shutil
     import subprocess
