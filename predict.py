@@ -114,6 +114,7 @@ class Predictor(BasePredictor):
             name_rank_map = {}
             for tk, tv in tensors.items():
                 # up is N, d
+                tensors[tk] = tv.half()
                 if tk.endswith("up.weight"):
                     proc_name = ".".join(tk.split(".")[:-3])
                     r = tv.shape[1]
@@ -140,7 +141,7 @@ class Predictor(BasePredictor):
                         hidden_size=hidden_size,
                         cross_attention_dim=cross_attention_dim,
                         rank=name_rank_map[name],
-                    )
+                    ).half()
                 unet_lora_attn_procs[name] = module.to("cuda", non_blocking=True)
 
             unet.set_attn_processor(unet_lora_attn_procs)
