@@ -114,6 +114,7 @@ class Predictor(BasePredictor):
             name_rank_map = {}
             for tk, tv in tensors.items():
                 # up is N, d
+                tensors[tk] = tv.half()
                 if tk.endswith("up.weight"):
                     proc_name = ".".join(tk.split(".")[:-3])
                     r = tv.shape[1]
@@ -140,7 +141,7 @@ class Predictor(BasePredictor):
                         hidden_size=hidden_size,
                         cross_attention_dim=cross_attention_dim,
                         rank=name_rank_map[name],
-                    )
+                    ).half()
                 unet_lora_attn_procs[name] = module.to("cuda", non_blocking=True)
 
             unet.set_attn_processor(unet_lora_attn_procs)
@@ -159,6 +160,20 @@ class Predictor(BasePredictor):
         self.token_map = params
         self.tuned_weights = weights
         self.tuned_model = True
+
+    def unload_trained_weights(self, pipe: DiffusionPipeline):
+        print("unloading loras")
+
+        def _recursive_unset_lora(module: torch.nn.Module):
+            if hasattr(module, "lora_layer"):
+                module.lora_layer = None
+            
+            for _, child in module.named_children():
+                _recursive_unset_lora(child)
+        
+        _recursive_unset_lora(pipe.unet)
+        self.tuned_weights = None
+        self.tuned_model = False
 
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
@@ -350,6 +365,8 @@ class Predictor(BasePredictor):
 
         if replicate_weights:
             self.load_trained_weights(replicate_weights, self.txt2img_pipe)
+        elif self.tuned_model:
+            self.unload_trained_weights(self.txt2img_pipe)
 
         # OOMs can leave vae in bad state
         if self.txt2img_pipe.vae.dtype == torch.float32:
