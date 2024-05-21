@@ -9,9 +9,8 @@ jobs:
   push:
     runs-on: ubuntu-latest
     env:
-      BASE_MODEL: 'replicate-internal/official-sdxl-prod'
+      BASE_MODEL: 'stability-ai/sdxl'
       STAGING_MODEL: 'replicate-internal/official-sdxl-staging'
-      STAGING_DEPLOYMENT: 'replicate-internal/sdxl-staging-official'
 
     steps:
     - name: checkout
@@ -51,29 +50,18 @@ jobs:
     - name: cog-build
       if: steps.what-changed.outputs.cog-push == 'true'
       run: |
-        cog build
+        cog build --use-cuda-base-image=false
 
     - name: cog-push
       if: steps.what-changed.outputs.cog-push == 'true'
       run: |
-        cog push r8.im/"$STAGING_MODEL"
+        cog push --use-cuda-base-image=false r8.im/"$STAGING_MODEL"
 
     - name: install-yolo
+      if: steps.what-changed.outputs.cog-push == 'false'
       run: |
         sudo curl -o /usr/local/bin/yolo -L "https://github.com/replicate/yolo/releases/latest/download/yolo_$(uname -s)_$(uname -m)"
         sudo chmod +x /usr/local/bin/yolo
-
-    # TODO: once you confirm sentry works, remove from staging. 
-    # yolo as hack for pushing environment variables
-    - name: yolo-push-env
-      if: steps.what-changed.outputs.cog-push == 'true'
-      env:
-       REPLICATE_API_TOKEN: ${{secrets.REPLICATE_API_TOKEN}}
-       SENTRY_DSN: ${{secrets.SENTRY_DSN}}
-      run: |
-        touch meaningless_file.txt
-        echo "adding environment variables to $STAGING_MODEL"
-        yolo push -e SENTRY_DSN="$SENTRY_DSN" --base $STAGING_MODEL --dest $STAGING_MODEL meaningless_file.txt
 
     - name: yolo-push
       if: steps.what-changed.outputs.cog-push == 'false'
@@ -83,7 +71,7 @@ jobs:
       run: |
         echo "pushing changes from $BASE_MODEL to $STAGING_MODEL"
         echo "changed files: $FILES_CHANGED"
-        yolo push -e SENTRY_DSN="$SENTRY_DSN" --base $BASE_MODEL --dest $STAGING_MODEL $FILES_CHANGED
+        yolo push --base $BASE_MODEL --dest $STAGING_MODEL $FILES_CHANGED
 
     - uses: actions/setup-python@v5
       with:
@@ -100,18 +88,4 @@ jobs:
       run: |
         pytest tests/test_predict.py
 
-    - name: update deployment
-      env: 
-        REPLICATE_API_TOKEN: ${{secrets.REPLICATE_API_TOKEN}}
-      
-      run: |
-        sudo apt-get install jq
-        export LATEST_VERSION=$(curl -s -H "Authorization: Token $REPLICATE_API_TOKEN" \
-          https://api.replicate.com/v1/models/$STAGING_MODEL/versions | jq -r '.results[0].id')
-        curl -s \
-          -X PATCH \
-          -H "Authorization: Token $REPLICATE_API_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d '{"version": "'$LATEST_VERSION'" }' \
-          https://api.replicate.com/v1/deployments/$STAGING_DEPLOYMENT
         
