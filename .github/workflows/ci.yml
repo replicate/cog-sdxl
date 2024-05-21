@@ -54,6 +54,8 @@ jobs:
 
     - name: cog-push
       if: steps.what-changed.outputs.cog-push == 'true'
+      env:
+       REPLICATE_API_TOKEN: ${{secrets.REPLICATE_API_TOKEN}}
       run: |
         cog push --use-cuda-base-image=false r8.im/"$STAGING_MODEL"
 
