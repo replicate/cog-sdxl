@@ -21,7 +21,7 @@ jobs:
     - name: what changed
       id: what-changed
       run: |
-        FILES_CHANGED=$(git diff --name-only --diff-filter=AMR ${{ github.event.before }} ${{ github.event.after }} | xargs)
+        FILES_CHANGED=$(git diff --name-only --diff-filter=AMR origin/main HEAD  | xargs)
         echo "FILES_CHANGED=$FILES_CHANGED" >> $GITHUB_ENV
         if echo "$FILES_CHANGED" | grep -q 'cog.yaml'; then
             echo "cog-push=true" >> $GITHUB_OUTPUT
