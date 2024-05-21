@@ -29,6 +29,7 @@ from diffusers.utils import load_image
 from safetensors import safe_open
 from safetensors.torch import load_file
 from transformers import CLIPImageProcessor
+import sentry_sdk
 
 from dataset_and_utils import TokenEmbeddingsHandler
 
@@ -163,83 +164,92 @@ class Predictor(BasePredictor):
     def setup(self, weights: Optional[Path] = None):
         """Load the model into memory to make running multiple predictions efficient"""
 
-        start = time.time()
-        self.tuned_model = False
-        self.tuned_weights = None
-        if str(weights) == "weights":
-            weights = None
+        sentry_dsn = os.getenv("SENTRY_DSN", "no-op")
+        if sentry_dsn != "no-op":
+            sentry_sdk.init(
+                dsn=sentry_dsn,
+            )
+            print("sentry init")
+        try: 
+            start = time.time()
+            self.tuned_model = False
+            self.tuned_weights = None
+            if str(weights) == "weights":
+                weights = None
 
-        self.weights_cache = WeightsDownloadCache()
+            self.weights_cache = WeightsDownloadCache()
 
-        print("Loading safety checker...")
-        if not os.path.exists(SAFETY_CACHE):
-            download_weights(SAFETY_URL, SAFETY_CACHE)
-        self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
-            SAFETY_CACHE, torch_dtype=torch.float16
-        ).to("cuda")
-        self.feature_extractor = CLIPImageProcessor.from_pretrained(FEATURE_EXTRACTOR)
+            print("Loading safety checker...")
+            if not os.path.exists(SAFETY_CACHE):
+                download_weights(SAFETY_URL, SAFETY_CACHE)
+            self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
+                SAFETY_CACHE, torch_dtype=torch.float16
+            ).to("cuda")
+            self.feature_extractor = CLIPImageProcessor.from_pretrained(FEATURE_EXTRACTOR)
 
-        if not os.path.exists(SDXL_MODEL_CACHE):
-            download_weights(SDXL_URL, SDXL_MODEL_CACHE)
+            if not os.path.exists(SDXL_MODEL_CACHE):
+                download_weights(SDXL_URL, SDXL_MODEL_CACHE)
 
-        print("Loading sdxl txt2img pipeline...")
-        self.txt2img_pipe = DiffusionPipeline.from_pretrained(
-            SDXL_MODEL_CACHE,
-            torch_dtype=torch.float16,
-            use_safetensors=True,
-            variant="fp16",
-        )
-        self.is_lora = False
-        if weights or os.path.exists("./trained-model"):
-            self.load_trained_weights(weights, self.txt2img_pipe)
+            print("Loading sdxl txt2img pipeline...")
+            self.txt2img_pipe = DiffusionPipeline.from_pretrained(
+                SDXL_MODEL_CACHE,
+                torch_dtype=torch.float16,
+                use_safetensors=True,
+                variant="fp16",
+            )
+            self.is_lora = False
+            if weights or os.path.exists("./trained-model"):
+                self.load_trained_weights(weights, self.txt2img_pipe)
 
-        self.txt2img_pipe.to("cuda")
+            self.txt2img_pipe.to("cuda")
 
-        print("Loading SDXL img2img pipeline...")
-        self.img2img_pipe = StableDiffusionXLImg2ImgPipeline(
-            vae=self.txt2img_pipe.vae,
-            text_encoder=self.txt2img_pipe.text_encoder,
-            text_encoder_2=self.txt2img_pipe.text_encoder_2,
-            tokenizer=self.txt2img_pipe.tokenizer,
-            tokenizer_2=self.txt2img_pipe.tokenizer_2,
-            unet=self.txt2img_pipe.unet,
-            scheduler=self.txt2img_pipe.scheduler,
-        )
-        self.img2img_pipe.to("cuda")
+            print("Loading SDXL img2img pipeline...")
+            self.img2img_pipe = StableDiffusionXLImg2ImgPipeline(
+                vae=self.txt2img_pipe.vae,
+                text_encoder=self.txt2img_pipe.text_encoder,
+                text_encoder_2=self.txt2img_pipe.text_encoder_2,
+                tokenizer=self.txt2img_pipe.tokenizer,
+                tokenizer_2=self.txt2img_pipe.tokenizer_2,
+                unet=self.txt2img_pipe.unet,
+                scheduler=self.txt2img_pipe.scheduler,
+            )
+            self.img2img_pipe.to("cuda")
 
-        print("Loading SDXL inpaint pipeline...")
-        self.inpaint_pipe = StableDiffusionXLInpaintPipeline(
-            vae=self.txt2img_pipe.vae,
-            text_encoder=self.txt2img_pipe.text_encoder,
-            text_encoder_2=self.txt2img_pipe.text_encoder_2,
-            tokenizer=self.txt2img_pipe.tokenizer,
-            tokenizer_2=self.txt2img_pipe.tokenizer_2,
-            unet=self.txt2img_pipe.unet,
-            scheduler=self.txt2img_pipe.scheduler,
-        )
-        self.inpaint_pipe.to("cuda")
+            print("Loading SDXL inpaint pipeline...")
+            self.inpaint_pipe = StableDiffusionXLInpaintPipeline(
+                vae=self.txt2img_pipe.vae,
+                text_encoder=self.txt2img_pipe.text_encoder,
+                text_encoder_2=self.txt2img_pipe.text_encoder_2,
+                tokenizer=self.txt2img_pipe.tokenizer,
+                tokenizer_2=self.txt2img_pipe.tokenizer_2,
+                unet=self.txt2img_pipe.unet,
+                scheduler=self.txt2img_pipe.scheduler,
+            )
+            self.inpaint_pipe.to("cuda")
 
-        print("Loading SDXL refiner pipeline...")
-        # FIXME(ja): should the vae/text_encoder_2 be loaded from SDXL always?
-        #            - in the case of fine-tuned SDXL should we still?
-        # FIXME(ja): if the answer to above is use VAE/Text_Encoder_2 from fine-tune
-        #            what does this imply about lora + refiner? does the refiner need to know about
+            print("Loading SDXL refiner pipeline...")
+            # FIXME(ja): should the vae/text_encoder_2 be loaded from SDXL always?
+            #            - in the case of fine-tuned SDXL should we still?
+            # FIXME(ja): if the answer to above is use VAE/Text_Encoder_2 from fine-tune
+            #            what does this imply about lora + refiner? does the refiner need to know about
 
-        if not os.path.exists(REFINER_MODEL_CACHE):
-            download_weights(REFINER_URL, REFINER_MODEL_CACHE)
+            if not os.path.exists(REFINER_MODEL_CACHE):
+                download_weights(REFINER_URL, REFINER_MODEL_CACHE)
 
-        print("Loading refiner pipeline...")
-        self.refiner = DiffusionPipeline.from_pretrained(
-            REFINER_MODEL_CACHE,
-            text_encoder_2=self.txt2img_pipe.text_encoder_2,
-            vae=self.txt2img_pipe.vae,
-            torch_dtype=torch.float16,
-            use_safetensors=True,
-            variant="fp16",
-        )
-        self.refiner.to("cuda")
-        print("setup took: ", time.time() - start)
-        # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
+            print("Loading refiner pipeline...")
+            self.refiner = DiffusionPipeline.from_pretrained(
+                REFINER_MODEL_CACHE,
+                text_encoder_2=self.txt2img_pipe.text_encoder_2,
+                vae=self.txt2img_pipe.vae,
+                torch_dtype=torch.float16,
+                use_safetensors=True,
+                variant="fp16",
+            )
+            self.refiner.to("cuda")
+            print("setup took: ", time.time() - start)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            raise e
 
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
@@ -344,98 +354,110 @@ class Predictor(BasePredictor):
         ),
     ) -> List[Path]:
         """Run a single prediction on the model."""
-        if seed is None:
-            seed = int.from_bytes(os.urandom(2), "big")
-        print(f"Using seed: {seed}")
+        try: 
+            if seed is None:
+                seed = int.from_bytes(os.urandom(2), "big")
+            print(f"Using seed: {seed}")
 
-        if replicate_weights:
-            self.load_trained_weights(replicate_weights, self.txt2img_pipe)
+            if replicate_weights:
+                self.load_trained_weights(replicate_weights, self.txt2img_pipe)
 
-        # OOMs can leave vae in bad state
-        if self.txt2img_pipe.vae.dtype == torch.float32:
-            self.txt2img_pipe.vae.to(dtype=torch.float16)
+            # OOMs can leave vae in bad state
+            if self.txt2img_pipe.vae.dtype == torch.float32:
+                self.txt2img_pipe.vae.to(dtype=torch.float16)
 
-        sdxl_kwargs = {}
-        if self.tuned_model:
-            # consistency with fine-tuning API
-            for k, v in self.token_map.items():
-                prompt = prompt.replace(k, v)
-        print(f"Prompt: {prompt}")
-        if image and mask:
-            print("inpainting mode")
-            sdxl_kwargs["image"] = self.load_image(image)
-            sdxl_kwargs["mask_image"] = self.load_image(mask)
-            sdxl_kwargs["strength"] = prompt_strength
-            sdxl_kwargs["width"] = width
-            sdxl_kwargs["height"] = height
-            pipe = self.inpaint_pipe
-        elif image:
-            print("img2img mode")
-            sdxl_kwargs["image"] = self.load_image(image)
-            sdxl_kwargs["strength"] = prompt_strength
-            pipe = self.img2img_pipe
-        else:
-            print("txt2img mode")
-            sdxl_kwargs["width"] = width
-            sdxl_kwargs["height"] = height
-            pipe = self.txt2img_pipe
-
-        if refine == "expert_ensemble_refiner":
-            sdxl_kwargs["output_type"] = "latent"
-            sdxl_kwargs["denoising_end"] = high_noise_frac
-        elif refine == "base_image_refiner":
-            sdxl_kwargs["output_type"] = "latent"
-
-        if not apply_watermark:
-            # toggles watermark for this prediction
-            watermark_cache = pipe.watermark
-            pipe.watermark = None
-            self.refiner.watermark = None
-
-        pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
-        generator = torch.Generator("cuda").manual_seed(seed)
-
-        common_args = {
-            "prompt": [prompt] * num_outputs,
-            "negative_prompt": [negative_prompt] * num_outputs,
-            "guidance_scale": guidance_scale,
-            "generator": generator,
-            "num_inference_steps": num_inference_steps,
-        }
-
-        if self.is_lora:
-            sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
-
-        output = pipe(**common_args, **sdxl_kwargs)
-
-        if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
-            refiner_kwargs = {
-                "image": output.images,
-            }
+            sdxl_kwargs = {}
+            if self.tuned_model:
+                # consistency with fine-tuning API
+                for k, v in self.token_map.items():
+                    prompt = prompt.replace(k, v)
+            print(f"Prompt: {prompt}")
+            if image and mask:
+                print("inpainting mode")
+                sdxl_kwargs["image"] = self.load_image(image)
+                sdxl_kwargs["mask_image"] = self.load_image(mask)
+                sdxl_kwargs["strength"] = prompt_strength
+                sdxl_kwargs["width"] = width
+                sdxl_kwargs["height"] = height
+                pipe = self.inpaint_pipe
+            elif image:
+                print("img2img mode")
+                sdxl_kwargs["image"] = self.load_image(image)
+                sdxl_kwargs["strength"] = prompt_strength
+                pipe = self.img2img_pipe
+            else:
+                print("txt2img mode")
+                sdxl_kwargs["width"] = width
+                sdxl_kwargs["height"] = height
+                pipe = self.txt2img_pipe
 
             if refine == "expert_ensemble_refiner":
-                refiner_kwargs["denoising_start"] = high_noise_frac
-            if refine == "base_image_refiner" and refine_steps:
-                common_args["num_inference_steps"] = refine_steps
+                sdxl_kwargs["output_type"] = "latent"
+                sdxl_kwargs["denoising_end"] = high_noise_frac
+            elif refine == "base_image_refiner":
+                sdxl_kwargs["output_type"] = "latent"
 
-            output = self.refiner(**common_args, **refiner_kwargs)
+            if not apply_watermark:
+                # toggles watermark for this prediction
+                watermark_cache = pipe.watermark
+                pipe.watermark = None
+                self.refiner.watermark = None
 
-        if not apply_watermark:
-            pipe.watermark = watermark_cache
-            self.refiner.watermark = watermark_cache
+            pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
+            generator = torch.Generator("cuda").manual_seed(seed)
 
-        if not disable_safety_checker:
-            _, has_nsfw_content = self.run_safety_checker(output.images)
+            common_args = {
+                "prompt": [prompt] * num_outputs,
+                "negative_prompt": [negative_prompt] * num_outputs,
+                "guidance_scale": guidance_scale,
+                "generator": generator,
+                "num_inference_steps": num_inference_steps,
+            }
 
-        output_paths = []
-        for i, image in enumerate(output.images):
+            if self.is_lora:
+                sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
+
+            output = pipe(**common_args, **sdxl_kwargs)
+
+            if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
+                refiner_kwargs = {
+                    "image": output.images,
+                }
+
+                if refine == "expert_ensemble_refiner":
+                    refiner_kwargs["denoising_start"] = high_noise_frac
+                if refine == "base_image_refiner" and refine_steps:
+                    common_args["num_inference_steps"] = refine_steps
+
+                output = self.refiner(**common_args, **refiner_kwargs)
+
+            if not apply_watermark:
+                pipe.watermark = watermark_cache
+                self.refiner.watermark = watermark_cache
+
             if not disable_safety_checker:
-                if has_nsfw_content[i]:
-                    print(f"NSFW content detected in image {i}")
-                    continue
-            output_path = f"/tmp/out-{i}.png"
-            image.save(output_path)
-            output_paths.append(Path(output_path))
+                _, has_nsfw_content = self.run_safety_checker(output.images)
+
+            output_paths = []
+            for i, image in enumerate(output.images):
+                if not disable_safety_checker:
+                    if has_nsfw_content[i]:
+                        print(f"NSFW content detected in image {i}")
+                        continue
+                output_path = f"/tmp/out-{i}.png"
+                image.save(output_path)
+                output_paths.append(Path(output_path))
+        except Exception as e:
+            # scrub PII
+            del prompt
+            del negative_prompt
+            del image
+            del mask
+
+            if sdxl_kwargs is not None and 'image' in sdxl_kwargs:
+                image_shape = sdxl_kwargs['image'].size
+            sentry_sdk.capture_exception(e)
+            raise e
 
         if len(output_paths) == 0:
             raise Exception(
