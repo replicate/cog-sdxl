@@ -98,7 +98,7 @@ def service():
     if ENV == 'local':
         print("building model")
         # starts local server if we're running things locally
-        build_command = 'cog build -t test-model'.split()
+        build_command = 'cog build --use-cuda-base-image false -t test-model'.split()
         subprocess.run(build_command, check=True)
         container_name = 'cog-test'
         try:
@@ -203,3 +203,32 @@ def test_lora_load_unload(inference_func, request):
     lora_b_img = inference_func(lora_b_data)
     assert not image_equal_fuzzy(lora_a_img_1, lora_b_img, test_name=request.node.name)
     assert not image_equal_fuzzy(base_img_1, lora_b_img, test_name=request.node.name)
+
+
+def test_unet_attn_processor(inference_func, request):
+    """
+    Tests that we're properly handling a bug with unet attention processors
+    """
+    SEED = 1234
+    base_data = {
+        "prompt": "A photo of a dog on the beach",
+        "num_inference_steps": 10,
+        "seed": SEED,
+    }
+    base_data['replicate_weights'] = "https://storage.googleapis.com/dan-scratch-public/sdxl/other_model.tar"
+    img_1 = inference_func(base_data)
+
+    assert img_1 is not None
+
+    with pytest.raises(Exception): 
+        base_data['replicate_weights'] = "https://storage.googleapis.com/dan-scratch-public/sdxl/monstertoy_model.tar"
+        base_data['image'] = "https://storage.googleapis.com/dan-scratch-public/sdxl/not_an_image.txt"
+
+        img_2 = inference_func(base_data)
+    
+    base_data['replicate_weights'] = "https://storage.googleapis.com/dan-scratch-public/sdxl/other_model.tar"
+    img_2 = inference_func(base_data)
+
+    assert img_2 is not None
+    assert image_equal_fuzzy(img_1, img_2, test_name=request.node.name)
+    

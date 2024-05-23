@@ -108,6 +108,15 @@ class Predictor(BasePredictor):
 
             unet = pipe.unet
 
+            if not hasattr(unet, 'attn_processors'):
+                # step just unet for edge case where attention processors aren't loaded
+                latents = torch.rand(2, 4, 128, 128).half().cuda()
+                text = torch.rand(2, 77, 2048).half().cuda()
+                text_embeds = torch.rand(2, 1280).half().cuda()
+                time_ids = torch.rand(2, 6).half().cuda()
+                timestep = torch.tensor([1]).half().cuda()
+                unet(latents, timestep, text, added_cond_kwargs={'text_embeds': text_embeds, 'time_ids': time_ids})
+
             tensors = load_file(os.path.join(local_weights_cache, "lora.safetensors"))
 
             unet_lora_attn_procs = {}
@@ -120,7 +129,7 @@ class Predictor(BasePredictor):
                     r = tv.shape[1]
                     name_rank_map[proc_name] = r
 
-            for name, attn_processor in unet.attn_processors.items():
+            for name, _ in unet.attn_processors.items():
                 cross_attention_dim = (
                     None
                     if name.endswith("attn1.processor")
