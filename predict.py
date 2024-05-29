@@ -209,6 +209,8 @@ class Predictor(BasePredictor):
             self.load_trained_weights(weights, self.txt2img_pipe)
 
         self.txt2img_pipe.to("cuda")
+        self.txt2img_pipe.n_steps = 0
+
 
         print("Loading SDXL img2img pipeline...")
         self.img2img_pipe = StableDiffusionXLImg2ImgPipeline(
@@ -221,6 +223,7 @@ class Predictor(BasePredictor):
             scheduler=self.txt2img_pipe.scheduler,
         )
         self.img2img_pipe.to("cuda")
+        self.img2img_pipe.n_steps = 0
 
         print("Loading SDXL inpaint pipeline...")
         self.inpaint_pipe = StableDiffusionXLInpaintPipeline(
@@ -233,6 +236,7 @@ class Predictor(BasePredictor):
             scheduler=self.txt2img_pipe.scheduler,
         )
         self.inpaint_pipe.to("cuda")
+        self.inpaint_pipe.n_steps = 0
 
         print("Loading SDXL refiner pipeline...")
         # FIXME(ja): should the vae/text_encoder_2 be loaded from SDXL always?
@@ -253,6 +257,7 @@ class Predictor(BasePredictor):
             variant="fp16",
         )
         self.refiner.to("cuda")
+        self.refiner.n_steps = 0
         print("setup took: ", time.time() - start)
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
 
@@ -410,7 +415,12 @@ class Predictor(BasePredictor):
             self.refiner.watermark = None
 
         pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
+        pipe.n_steps = 0
         generator = torch.Generator("cuda").manual_seed(seed)
+
+        def count_steps(pipe, i, t, callback_kwargs):
+            pipe.n_steps += 1
+            return callback_kwargs
 
         common_args = {
             "prompt": [prompt] * num_outputs,
@@ -418,17 +428,20 @@ class Predictor(BasePredictor):
             "guidance_scale": guidance_scale,
             "generator": generator,
             "num_inference_steps": num_inference_steps,
+            "callback_on_step_end": count_steps
         }
 
         if self.is_lora:
             sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
 
         output = pipe(**common_args, **sdxl_kwargs)
+        total_steps = pipe.n_steps
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
             refiner_kwargs = {
                 "image": output.images,
             }
+            self.refiner.n_steps = 0
 
             if refine == "expert_ensemble_refiner":
                 refiner_kwargs["denoising_start"] = high_noise_frac
@@ -436,6 +449,7 @@ class Predictor(BasePredictor):
                 common_args["num_inference_steps"] = refine_steps
 
             output = self.refiner(**common_args, **refiner_kwargs)
+            total_steps += self.refiner.n_steps
 
         if not apply_watermark:
             pipe.watermark = watermark_cache
@@ -458,5 +472,5 @@ class Predictor(BasePredictor):
             raise Exception(
                 f"NSFW content detected. Try running it again, or try a different prompt."
             )
-
+        print("num inferende steps", total_steps)
         return output_paths
