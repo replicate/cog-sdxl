@@ -9,7 +9,7 @@ from weights import WeightsDownloadCache
 
 import numpy as np
 import torch
-from cog import BasePredictor, Input, Path
+from cog import BasePredictor, Input, Path, emit_metric
 from diffusers import (
     DDIMScheduler,
     DiffusionPipeline,
@@ -396,6 +396,8 @@ class Predictor(BasePredictor):
             sdxl_kwargs["image"] = self.load_image(image)
             sdxl_kwargs["strength"] = prompt_strength
             pipe = self.img2img_pipe
+            width = sdxl_kwargs["image"].width
+            height = sdxl_kwargs["image"].height
         else:
             print("txt2img mode")
             sdxl_kwargs["width"] = width
@@ -472,5 +474,8 @@ class Predictor(BasePredictor):
             raise Exception(
                 f"NSFW content detected. Try running it again, or try a different prompt."
             )
-        print("num inferende steps", total_steps)
+        emit_metric("total_inference_steps", total_steps)
+        emit_metric("num_outputs", num_outputs)
+        emit_metric("height", height)
+        emit_metric("width", width)
         return output_paths
