@@ -60,11 +60,13 @@ SCHEDULERS = {
 
 
 def download_weights(url, dest):
-    start = time.time()
-    print("downloading url: ", url)
-    print("downloading to: ", dest)
-    subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
-    print("downloading took: ", time.time() - start)
+    # start = time.time()
+    # print("downloading url: ", url)
+    # print("downloading to: ", dest)
+    # subprocess.check_call(["pget", "-x", url, dest], close_fds=False)
+    # print("downloading took: ", time.time() - start)
+    print("no-op for download_weights()")
+    pass
 
 
 class Predictor(BasePredictor):
