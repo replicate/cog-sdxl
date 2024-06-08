@@ -1,3 +1,6 @@
+
+#!/usr/bin/env python3
+
 # Run this before you deploy it on replicate, because if you don't
 # whenever you run the model, it will download the weights from the
 # internet, which will take a long time.
