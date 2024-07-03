@@ -1,3 +1,4 @@
+from functools import partial
 import hashlib
 import json
 import os
@@ -43,20 +44,16 @@ REFINER_URL = (
 SAFETY_URL = "https://weights.replicate.delivery/default/sdxl/safety-1.0.tar"
 
 
-class KarrasDPM:
-    def from_config(config):
-        return DPMSolverMultistepScheduler.from_config(config, use_karras_sigmas=True)
 
-
-SCHEDULERS = {
-    "DDIM": DDIMScheduler,
-    "DPMSolverMultistep": DPMSolverMultistepScheduler,
-    "HeunDiscrete": HeunDiscreteScheduler,
-    "KarrasDPM": KarrasDPM,
-    "K_EULER_ANCESTRAL": EulerAncestralDiscreteScheduler,
-    "K_EULER": EulerDiscreteScheduler,
-    "PNDM": PNDMScheduler,
-}
+SCHEDULER_FACTORY = {
+    "DDIM": DDIMScheduler.from_config,
+    "DPMSolverMultistep": partial(DPMSolverMultistepScheduler.from_config, use_karras_sigmas=False),
+    "HeunDiscrete": partial(HeunDiscreteScheduler.from_config, use_karras_sigmas=False),
+    "KarrasDPM": partial(DPMSolverMultistepScheduler.from_config, use_karras_sigmas=True),
+    "K_EULER_ANCESTRAL": EulerAncestralDiscreteScheduler.from_config,
+    "K_EULER": partial(EulerDiscreteScheduler.from_config, use_karras_sigmas=False),
+    "PNDM": PNDMScheduler.from_config,
+}        
 
 
 def download_weights(url, dest):
@@ -311,7 +308,7 @@ class Predictor(BasePredictor):
         ),
         scheduler: str = Input(
             description="scheduler",
-            choices=SCHEDULERS.keys(),
+            choices=SCHEDULER_FACTORY.keys(),
             default="K_EULER",
         ),
         num_inference_steps: int = Input(
@@ -416,7 +413,7 @@ class Predictor(BasePredictor):
             pipe.watermark = None
             self.refiner.watermark = None
 
-        pipe.scheduler = SCHEDULERS[scheduler].from_config(pipe.scheduler.config)
+        pipe.scheduler = SCHEDULER_FACTORY[scheduler](pipe.scheduler.config)
         pipe.n_steps = 0
         generator = torch.Generator("cuda").manual_seed(seed)
 
@@ -444,6 +441,7 @@ class Predictor(BasePredictor):
                 "image": output.images,
             }
             self.refiner.n_steps = 0
+            self.refiner.scheduler = pipe.scheduler
 
             if refine == "expert_ensemble_refiner":
                 refiner_kwargs["denoising_start"] = high_noise_frac
@@ -474,6 +472,7 @@ class Predictor(BasePredictor):
             raise Exception(
                 f"NSFW content detected. Try running it again, or try a different prompt."
             )
+        print("total steps", total_steps)
         emit_metric("total_inference_steps", total_steps)
         emit_metric("num_outputs", num_outputs)
         emit_metric("height", height)
