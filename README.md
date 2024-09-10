@@ -24,6 +24,22 @@ cog train -i input_images=@example_datasets/__data.zip -i use_face_detection_ins
 cog run -p 5000 python -m cog.server.http
 ```
 
+## Push to Replicate
+
+to push the trainable model to replicate, execute the following commands:
+
+```bash
+chmod +x script/download_weights
+```
+
+```bash
+cog run script/download_weights
+```
+
+```bash
+cog push r8.im/"your model name in replicate here"
+```
+
 ## Update notes
 
 **2023-08-17**
